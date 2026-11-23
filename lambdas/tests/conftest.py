@@ -22,6 +22,18 @@ Nice to have: Kubernetes, Terraform.
 """
 
 
+@pytest.fixture(autouse=True)
+def block_aws(monkeypatch):
+    """Unit tests must never reach real AWS, even if the machine has credentials."""
+
+    def blocked(*_a, **_k):
+        raise RuntimeError("AWS call attempted in a unit test; patch the function under test")
+
+    monkeypatch.setattr("common.jobs._tbl", blocked)
+    monkeypatch.setattr("common.storage._client", blocked)
+    monkeypatch.setattr("common.llm._bedrock", blocked)
+
+
 @pytest.fixture
 def resume():
     return RESUME

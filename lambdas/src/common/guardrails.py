@@ -55,6 +55,15 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+_NUMBER = re.compile(r"\d[\d,.]*")
+
+
+def numbers_supported(text: str, source: str) -> bool:
+    """True if every number in `text` also appears in `source` (blocks invented metrics)."""
+    source_numbers = {n.rstrip(",.") for n in _NUMBER.findall(source)}
+    return all(n.rstrip(",.") in source_numbers for n in _NUMBER.findall(text))
+
+
 def quote_in_source(quote: str, source: str) -> bool:
     """True if `quote` appears verbatim (ignoring whitespace/case) in `source`.
 
