@@ -1,0 +1,86 @@
+import * as fs from 'node:fs';
+import { Duration, Fn, RemovalPolicy } from 'aws-cdk-lib';
+import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as deploy from 'aws-cdk-lib/aws-s3-deployment';
+import { Construct } from 'constructs';
+
+export interface FrontendProps {
+  httpApi: apigw.HttpApi;
+  /** Directory containing the built React app (frontend/dist). */
+  distPath: string;
+}
+
+/** Private S3 bucket served through CloudFront (OAC). /api/* is forwarded to the HTTP API. */
+export class Frontend extends Construct {
+  readonly distribution: cloudfront.Distribution;
+
+  constructor(scope: Construct, id: string, props: FrontendProps) {
+    super(scope, id);
+
+    if (!fs.existsSync(props.distPath)) {
+      throw new Error(`Frontend build not found at ${props.distPath}. Run "npm ci && npm run build" in frontend/ first.`);
+    }
+
+    const siteBucket = new s3.Bucket(this, 'SiteBucket', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
+    const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
+      securityHeadersBehavior: {
+        contentSecurityPolicy: {
+          override: true,
+          contentSecurityPolicy:
+            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+            "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+        },
+        strictTransportSecurity: {
+          override: true,
+          accessControlMaxAge: Duration.days(365),
+          includeSubdomains: true,
+        },
+        contentTypeOptions: { override: true },
+        frameOptions: { override: true, frameOption: cloudfront.HeadersFrameOption.DENY },
+        referrerPolicy: { override: true, referrerPolicy: cloudfront.HeadersReferrerPolicy.NO_REFERRER },
+      },
+    });
+
+    const apiHost = Fn.select(2, Fn.split('/', props.httpApi.apiEndpoint));
+
+    this.distribution = new cloudfront.Distribution(this, 'Distribution', {
+      defaultRootObject: 'index.html',
+      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        responseHeadersPolicy: securityHeaders,
+        compress: true,
+      },
+      additionalBehaviors: {
+        '/api/*': {
+          origin: new origins.HttpOrigin(apiHost, { protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY }),
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          responseHeadersPolicy: securityHeaders,
+        },
+      },
+      // No SPA error-page rewrite on purpose: it would also rewrite /api 404s into index.html.
+    });
+
+    new deploy.BucketDeployment(this, 'DeploySite', {
+      sources: [deploy.Source.asset(props.distPath)],
+      destinationBucket: siteBucket,
+      distribution: this.distribution,
+      distributionPaths: ['/*'],
+    });
+  }
+}
