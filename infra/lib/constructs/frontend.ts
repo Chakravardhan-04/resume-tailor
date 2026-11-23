@@ -55,7 +55,6 @@ export class Frontend extends Construct {
 
     this.distribution = new cloudfront.Distribution(this, 'Distribution', {
       defaultRootObject: 'index.html',
-      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
