@@ -1,0 +1,29 @@
+# dependencies / build
+node_modules/
+dist/
+build/
+cdk.out/
+*.tsbuildinfo
+coverage/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+
+# local artefacts
+cdk.context.json
+audit-export*.json
