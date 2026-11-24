@@ -51,3 +51,7 @@ def record_ttl_seconds() -> int:
 def sender_email() -> str:
     """Verified SES sender address (empty when email is not configured)."""
     return os.environ.get("SENDER_EMAIL", "")
+
+
+def max_jobs_per_user_per_day() -> int:
+    return _int("MAX_JOBS_PER_USER_PER_DAY", 5)

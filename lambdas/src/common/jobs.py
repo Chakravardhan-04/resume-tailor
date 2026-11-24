@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Any
 
 import boto3
+from botocore.exceptions import ClientError
 
 from common import config
 from common.guardrails import redact_secrets_deep
@@ -36,7 +37,7 @@ def _expires_at() -> int:
     return int(time.time()) + config.record_ttl_seconds()
 
 
-def create_job(job_id: str, email: str | None = None) -> None:
+def create_job(job_id: str, email: str | None = None, user_id: str | None = None) -> None:
     item: dict[str, Any] = {
         "jobId": job_id,
         "sk": META,
@@ -46,9 +47,28 @@ def create_job(job_id: str, email: str | None = None) -> None:
         "updatedAt": _now(),
         "expiresAt": _expires_at(),
     }
+    if user_id:
+        item["userId"] = user_id  # owner: the status endpoint only serves a job to its owner
     if email:
         item["email"] = email  # removed as soon as the email has been attempted
     _tbl().put_item(Item=item, ConditionExpression="attribute_not_exists(jobId)")
+
+
+def claim_daily_quota(user_id: str, limit: int) -> bool:
+    """Atomically count one job for this user today. False when the daily limit is reached."""
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+    try:
+        _tbl().update_item(
+            Key={"jobId": f"USER#{user_id}", "sk": f"QUOTA#{day}"},
+            UpdateExpression="ADD used :one SET expiresAt = :e",
+            ConditionExpression="attribute_not_exists(used) OR used < :limit",
+            ExpressionAttributeValues={":one": 1, ":limit": limit, ":e": int(time.time()) + 2 * 24 * 3600},
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False
+        raise
+    return True
 
 
 def set_email_status(job_id: str, status: str, message: str | None = None) -> None:
