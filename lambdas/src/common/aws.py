@@ -163,7 +163,7 @@ def write_audit(job_id: str, stage: str, output: dict) -> None:
     )
 
 
-def claim_daily_quota(user_id: str, limit: int = 5) -> bool:
+def claim_daily_quota(user_id: str, limit: int = 15) -> bool:
     """Count one job for this user today. Returns False once the limit is reached (atomic)."""
     day = datetime.now(UTC).strftime("%Y-%m-%d")
     try:

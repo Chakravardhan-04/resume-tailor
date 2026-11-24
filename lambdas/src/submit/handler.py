@@ -36,7 +36,7 @@ def handler(event, _context=None):
     except (json.JSONDecodeError, AttributeError):
         return response(400, {"error": "Send a JSON body with resume and jobDescription."})
 
-    if not aws.claim_daily_quota(user_id):  # cost guard: 5 jobs per user per day
+    if not aws.claim_daily_quota(user_id):  # cost guard: 15 jobs per user per day
         return response(429, {"error": "Daily limit reached. Please try again tomorrow."})
 
     job_id = str(uuid.uuid4())
