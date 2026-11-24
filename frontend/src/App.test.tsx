@@ -49,6 +49,16 @@ describe('App', () => {
     expect(screen.getByText(/we emailed this draft/i)).toBeInTheDocument()
   })
 
+  it('rejects a PDF upload and explains why submit is disabled', async () => {
+    signIn()
+    render(<App />)
+    const pdf = new File(['%PDF-1.4 binary'], 'resume.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Upload Resume'), pdf, { applyAccept: false })
+    expect(screen.getByRole('alert')).toHaveTextContent('resume.pdf is not a .txt file')
+    expect(screen.getByText('Add the resume.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tailor my resume' })).toBeDisabled()
+  })
+
   it('shows the clear message from a failed pipeline', async () => {
     vi.spyOn(api, 'getJob').mockResolvedValue({ status: 'FAILED', stage: 'analyzer', error: 'The job description is missing for this job.' })
     render(<JobView jobId="j1" onReset={() => {}} />)

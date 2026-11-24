@@ -48,18 +48,40 @@ Nice to have
 
 const valid = (text: string) => text.trim().length >= MIN && text.length <= MAX
 
+/** Why a document is not ready yet, or '' when it is. */
+function problem(label: string, text: string): string {
+  if (!text.trim()) return `Add the ${label.toLowerCase()}.`
+  if (text.trim().length < MIN) return `The ${label.toLowerCase()} is too short (at least ${MIN} characters).`
+  if (text.length > MAX) return `The ${label.toLowerCase()} is too long (${text.length.toLocaleString()} of ${MAX.toLocaleString()} characters).`
+  return ''
+}
+
 /** One document box: paste text or upload a .txt/.md file. */
 function DocBox({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [fileError, setFileError] = useState('')
+
+  async function upload(file: File | undefined) {
+    if (!file) return
+    // Only plain text can be read here. A PDF or Word file would come in as unreadable binary data.
+    if (!/\.(txt|md)$/i.test(file.name)) {
+      setFileError(`${file.name} is not a .txt file. Open it, copy the text and paste it here instead.`)
+      return
+    }
+    setFileError('')
+    onChange(await file.text())
+  }
+
   return (
     <div className="card doc">
       <div className="doc-head">
         <label htmlFor={label}>{label}</label>
-        <input type="file" accept=".txt,.md" aria-label={`Upload ${label}`} onChange={async (e) => onChange((await e.target.files?.[0]?.text()) ?? value)} />
+        <input type="file" accept=".txt,.md" aria-label={`Upload ${label}`} onChange={(e) => upload(e.target.files?.[0])} />
       </div>
       <textarea id={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={`Paste the ${label.toLowerCase()}…`} />
       <span className={valid(value) || !value ? 'count' : 'count bad'}>
         {value.length.toLocaleString()} / {MAX.toLocaleString()} characters
       </span>
+      {fileError && <p className="alert alert-error" role="alert">{fileError}</p>}
     </div>
   )
 }
@@ -102,6 +124,8 @@ export default function TailorForm({ email, onSubmitted }: { email: string; onSu
 
       {error && <p className="alert alert-error" role="alert">{error}</p>}
       <div className="actions">
+        {/* Say why the button is disabled instead of leaving the user guessing. */}
+        <span className="hint">{problem('Resume', resume) || problem('Job description', job)}</span>
         <button type="submit" className="btn btn-primary" disabled={busy || !valid(resume) || !valid(job)}>
           {busy ? 'Submitting…' : 'Tailor my resume'}
         </button>
