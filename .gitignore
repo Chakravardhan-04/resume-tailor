@@ -25,5 +25,8 @@ __pycache__/
 .vscode/
 
 # local artefacts
+frontend/public/config.json
+*.local
+*.log
 cdk.context.json
 audit-export*.json

@@ -32,7 +32,7 @@ describe('App auth gate', () => {
     )
     render(<App />)
     expect(await screen.findByLabelText('Resume')).toBeInTheDocument()
-    expect(screen.getByText('me@example.com')).toBeInTheDocument()
+    expect(screen.getByRole('banner')).toHaveTextContent('me@example.com')
   })
 
   it('signs in with email and password', async () => {
@@ -45,7 +45,7 @@ describe('App auth gate', () => {
     render(<App />)
     await user.type(await screen.findByLabelText('Email'), 'me@example.com')
     await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
-    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
     expect(await screen.findByLabelText('Resume')).toBeInTheDocument()
   })
 
@@ -55,7 +55,7 @@ describe('App auth gate', () => {
     render(<App />)
     await user.type(await screen.findByLabelText('Email'), 'me@example.com')
     await user.type(screen.getByLabelText('Password'), 'wrongpassword1')
-    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email or password.')
   })
 
@@ -66,11 +66,11 @@ describe('App auth gate', () => {
     await user.click(await screen.findByRole('button', { name: 'Create an account' }))
     await user.type(screen.getByLabelText('Email'), 'new@example.com')
     await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
-    await user.click(screen.getByRole('button', { name: 'Create your account' }))
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(await screen.findByLabelText('Verification code')).toBeInTheDocument()
     await user.type(screen.getByLabelText('Verification code'), '123456')
-    await user.click(screen.getByRole('button', { name: 'Confirm your email' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm email' }))
 
     await waitFor(() => expect(screen.getByRole('form', { name: 'Sign in' })).toBeInTheDocument())
     expect(screen.getByText(/email confirmed/i)).toBeInTheDocument()
@@ -89,7 +89,7 @@ describe('App auth gate', () => {
     render(<App />)
     await user.type(await screen.findByLabelText('Email'), 'me@example.com')
     await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
-    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
     expect(await screen.findByLabelText('Verification code')).toBeInTheDocument()
   })
 
