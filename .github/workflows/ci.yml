@@ -28,6 +28,7 @@ jobs:
           cache-dependency-path: lambdas/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
+      - run: ruff format --check .
       - run: pytest -q
 
   frontend:

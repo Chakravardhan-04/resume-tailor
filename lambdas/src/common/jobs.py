@@ -1,7 +1,7 @@
 """DynamoDB access. One table, partition key `jobId`, sort key `sk`.
 
-  sk = "META"                      job status record
-  sk = "AUDIT#<iso-ts>#<stage>"    one audit entry per stage output
+sk = "META"                      job status record
+sk = "AUDIT#<iso-ts>#<stage>"    one audit entry per stage output
 """
 
 import json

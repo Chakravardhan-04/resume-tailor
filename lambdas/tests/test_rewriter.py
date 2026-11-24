@@ -60,14 +60,14 @@ def test_tailor_removes_bullets_flagged_by_verifier(monkeypatch, resume):
         drafts=[draft([HONEST, other])] * 3,
         verdicts=[{"summary_supported": True, "unsupported_bullets": [1]}] * 3,
     )
-    out = rewriter.tailor(resume, REQS, MATCH)
+    out = rewriter.tailor(resume, MATCH)
     assert out["bullets"] == [HONEST["text"]]
 
 
 def test_tailor_fails_closed_when_nothing_is_supported(monkeypatch, resume):
     _patch_llm(monkeypatch, drafts=[draft([FAKE_QUOTE, FAKE_NUMBER])] * 3, verdicts=[])
     with pytest.raises(GuardrailError):
-        rewriter.tailor(resume, REQS, MATCH)
+        rewriter.tailor(resume, MATCH)
 
 
 def test_tailor_is_bounded(monkeypatch, resume):
@@ -80,7 +80,7 @@ def test_tailor_is_bounded(monkeypatch, resume):
 
     monkeypatch.setattr(llm, "converse_json", fake)
     with pytest.raises(GuardrailError):
-        rewriter.tailor(resume, REQS, MATCH)
+        rewriter.tailor(resume, MATCH)
     assert len(calls) == 2
 
 

@@ -71,7 +71,7 @@ def verify(resume: str, draft: dict[str, Any], bullets: list[dict]) -> dict[str,
     return llm.converse_json(prompts.VERIFIER, user, validate_verdict(len(bullets)), max_iterations=2)
 
 
-def build_user_prompt(resume: str, requirements: list[dict], match: dict[str, Any], feedback: str) -> str:
+def build_user_prompt(resume: str, match: dict[str, Any], feedback: str) -> str:
     emphasise = [m["requirement"] for m in match["matched"]]
     gaps = [g["requirement"] for g in match["gaps"]]
     prompt = (
@@ -82,14 +82,14 @@ def build_user_prompt(resume: str, requirements: list[dict], match: dict[str, An
     return f"{prompt}\n\nFix these problems from your previous attempt: {feedback}" if feedback else prompt
 
 
-def tailor(resume: str, requirements: list[dict], match: dict[str, Any]) -> dict[str, Any]:
+def tailor(resume: str, match: dict[str, Any]) -> dict[str, Any]:
     """Bounded generate -> filter -> verify loop. Fails closed if nothing honest survives."""
     feedback = ""
     best: tuple[str, list[dict]] | None = None
     for attempt in range(1, config.max_iterations() + 1):
         draft = llm.converse_json(
             prompts.REWRITER,
-            build_user_prompt(resume, requirements, match, feedback),
+            build_user_prompt(resume, match, feedback),
             validate_draft,
             max_tokens=3000,
             max_iterations=2,
@@ -139,11 +139,10 @@ def deliver_email(job_id: str, result: dict[str, Any], pdf_bytes: bytes) -> str:
 @stage_handler("rewriter")
 def _run(event: dict[str, Any]) -> dict[str, Any]:
     job_id = event["jobId"]
-    requirements = event["analysis"]["requirements"]
     match = event["match"]
     resume, _ = storage.read_inputs(job_id)
 
-    draft = tailor(resume, requirements, match)
+    draft = tailor(resume, match)
     result = {
         "score": match["score"],
         "summary": draft["summary"],
