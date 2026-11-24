@@ -3,19 +3,21 @@ import { ApiError, submitJob } from './api'
 import { DemoBanner } from './components/DemoBanner'
 import { DocInput } from './components/DocInput'
 import { JobView } from './components/JobView'
-import { MAX_DOC_CHARS, MIN_DOC_CHARS } from './limits'
+import { EMAIL_PATTERN, MAX_DOC_CHARS, MIN_DOC_CHARS } from './limits'
 
 export default function App() {
   const [resume, setResume] = useState('')
   const [jobDescription, setJobDescription] = useState('')
+  const [email, setEmail] = useState('')
   const [jobId, setJobId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const valid = [resume, jobDescription].every((t) => {
+  const docsValid = [resume, jobDescription].every((t) => {
     const n = t.trim().length
     return n >= MIN_DOC_CHARS && n <= MAX_DOC_CHARS
   })
+  const valid = docsValid && EMAIL_PATTERN.test(email.trim())
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -23,7 +25,7 @@ export default function App() {
     setSubmitting(true)
     setError(null)
     try {
-      setJobId(await submitJob(resume, jobDescription))
+      setJobId(await submitJob(resume, jobDescription, email.trim()))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
     } finally {
@@ -59,6 +61,18 @@ export default function App() {
             disabled={submitting}
             placeholder="Paste the job posting…"
           />
+          <div className="field">
+            <label htmlFor="email">Email (we send the draft and PDF here)</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={submitting}
+              placeholder="you@example.com"
+            />
+          </div>
           {error && (
             <div role="alert" className="error">
               {error}

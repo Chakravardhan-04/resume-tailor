@@ -1,12 +1,13 @@
-import type { TailoredResult } from '../types'
+import type { Job, TailoredResult } from '../types'
 
 interface Props {
   result: TailoredResult
   downloadUrl?: string
+  email?: Job['email']
   onReset: () => void
 }
 
-export function ResultView({ result, downloadUrl, onReset }: Props) {
+export function ResultView({ result, downloadUrl, email, onReset }: Props) {
   return (
     <section className="result" aria-label="Tailored result">
       <div className="result-head">
@@ -24,6 +25,17 @@ export function ResultView({ result, downloadUrl, onReset }: Props) {
           </button>
         </div>
       </div>
+
+      {email?.status === 'SENT' && (
+        <p className="notice" role="status">
+          We emailed this draft, with the PDF attached, to your address.
+        </p>
+      )}
+      {email?.status === 'FAILED' && (
+        <p className="notice warn" role="status">
+          {email.message ?? 'The email could not be sent. You can still download the PDF.'}
+        </p>
+      )}
 
       <h2>Summary</h2>
       <p>{result.summary}</p>

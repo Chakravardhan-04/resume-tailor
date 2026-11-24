@@ -24,11 +24,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
-export async function submitJob(resume: string, jobDescription: string): Promise<string> {
+export async function submitJob(resume: string, jobDescription: string, email: string): Promise<string> {
   const { jobId } = await request<{ jobId: string }>('/api/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resume, jobDescription }),
+    body: JSON.stringify({ resume, jobDescription, email }),
   })
   return jobId
 }

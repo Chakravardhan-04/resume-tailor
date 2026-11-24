@@ -17,7 +17,7 @@ export function JobView({ jobId, onReset }: { jobId: string; onReset: () => void
     )
   }
   if (job?.status === 'DONE' && job.result) {
-    return <ResultView result={job.result} downloadUrl={job.downloadUrl} onReset={onReset} />
+    return <ResultView result={job.result} downloadUrl={job.downloadUrl} email={job.email} onReset={onReset} />
   }
   return (
     <div className="panel">

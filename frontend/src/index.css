@@ -19,7 +19,8 @@ h2 { margin: 24px 0 8px; font-size: 1.15rem; }
 .banner { background: #fff4e5; border: 1px solid #f0c27b; border-radius: 8px; padding: 10px 14px; margin: 16px 0; }
 .field { margin-bottom: 20px; }
 .field-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
-textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; resize: vertical; background: var(--card); }
+textarea, input[type='email'] { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font: inherit; resize: vertical; background: var(--card); }
+input[type='email'] { font: inherit; }
 textarea[aria-invalid='true'] { border-color: var(--danger); }
 .count { font-size: 0.8rem; color: var(--muted); text-align: right; }
 .count.over, .error { color: var(--danger); }
@@ -29,7 +30,10 @@ textarea[aria-invalid='true'] { border-color: var(--danger); }
 .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--fg); font: inherit; cursor: pointer; text-decoration: none; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn:focus-visible, textarea:focus-visible, .file-btn:focus-within { outline: 3px solid #8fb4f0; outline-offset: 2px; }
+.notice { background: #e6f4ea; border: 1px solid #a8d5b5; border-radius: 8px; padding: 8px 12px; }
+.notice.warn { background: #fff4e5; border-color: #f0c27b; }
+.field > label { display: block; font-weight: 600; margin-bottom: 6px; }
+.btn:focus-visible, textarea:focus-visible, input:focus-visible, .file-btn:focus-within { outline: 3px solid #8fb4f0; outline-offset: 2px; }
 .panel, .result { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; }
 .progress { list-style: none; padding: 0; margin: 16px 0 0; }
 .progress li { padding: 8px 0 8px 28px; position: relative; color: var(--muted); }

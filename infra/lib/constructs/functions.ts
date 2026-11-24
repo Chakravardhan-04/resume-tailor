@@ -20,6 +20,8 @@ const LAMBDAS_DIR = path.join(__dirname, '..', '..', '..', 'lambdas');
 
 export interface FunctionsProps {
   data: Data;
+  /** SES-verified address the results are sent from. */
+  senderEmail: string;
 }
 
 /** The three specialists plus the submit and status Lambdas, each with least-privilege IAM. */
@@ -61,6 +63,7 @@ export class Functions extends Construct {
     this.analyzer = this.fn('Analyzer', 'analyzer', { timeout: 120, memory: 512 });
     this.scorer = this.fn('Scorer', 'scorer', { timeout: 120, memory: 512 });
     this.rewriter = this.fn('Rewriter', 'rewriter', { timeout: 300, memory: 1024, layer: true });
+    this.rewriter.addEnvironment('SENDER_EMAIL', props.senderEmail);
 
     const { bucket, table } = props.data;
     const uploads = `${UPLOADS_PREFIX}*`;
@@ -78,6 +81,8 @@ export class Functions extends Construct {
       this.allowBedrock(stage);
     }
     bucket.grantPut(this.rewriter, results);
+    table.grant(this.rewriter, 'dynamodb:GetItem'); // reads the recipient address
+    this.allowSes(this.rewriter, props.senderEmail);
   }
 
   private fn(
@@ -97,6 +102,18 @@ export class Functions extends Construct {
       tracing: lambda.Tracing.ACTIVE,
       logGroup: new logs.LogGroup(this, `${id}Logs`, { retention: logs.RetentionDays.ONE_MONTH }),
     });
+  }
+
+  /** SES send, restricted to the one verified sender address. */
+  private allowSes(fn: lambda.Function, senderEmail: string): void {
+    const stack = Stack.of(this);
+    fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendEmail'],
+        resources: [`arn:${stack.partition}:ses:${stack.region}:${stack.account}:identity/*`],
+        conditions: { StringEquals: { 'ses:FromAddress': senderEmail } },
+      }),
+    );
   }
 
   private allowBedrock(fn: lambda.Function): void {

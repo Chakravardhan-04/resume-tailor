@@ -8,16 +8,18 @@ import { Functions } from './constructs/functions';
 import { Pipeline } from './constructs/pipeline';
 
 export interface ResumeTailorStackProps extends StackProps {
+  /** SES-verified sender address (deploy with `-c senderEmail=you@example.com`). */
+  senderEmail: string;
   /** Built React app. Defaults to ../frontend/dist (run `npm run build` in frontend/ first). */
   frontendDistPath?: string;
 }
 
 export class ResumeTailorStack extends Stack {
-  constructor(scope: Construct, id: string, props: ResumeTailorStackProps = {}) {
+  constructor(scope: Construct, id: string, props: ResumeTailorStackProps) {
     super(scope, id, props);
 
     const data = new Data(this, 'Data');
-    const functions = new Functions(this, 'Functions', { data });
+    const functions = new Functions(this, 'Functions', { data, senderEmail: props.senderEmail });
     const pipeline = new Pipeline(this, 'Pipeline', { data, functions });
     const api = new Api(this, 'Api', { functions });
     const frontend = new Frontend(this, 'Frontend', {

@@ -14,6 +14,7 @@ beforeAll(() => {
   const stack = new ResumeTailorStack(app, 'Test', {
     env: { account: '123456789012', region: 'us-east-1' },
     frontendDistPath: dist,
+    senderEmail: 'sender@example.com',
   });
   template = Template.fromStack(stack);
 });
@@ -127,5 +128,17 @@ test('submit can start the state machine; no function has wildcard actions', () 
   });
   const json = JSON.stringify(template.findResources('AWS::IAM::Policy'));
   expect(json).not.toMatch(/"Action":"\*"/);
-  expect(json).not.toContain('ses:');
+});
+
+test('only the rewriter can send email, and only from the configured sender', () => {
+  const policies = Object.values(template.findResources('AWS::IAM::Policy')) as any[];
+  const withSes = policies.filter((p) => JSON.stringify(p.Properties.PolicyDocument).includes('ses:SendEmail'));
+  expect(withSes).toHaveLength(1);
+  const statement = withSes[0].Properties.PolicyDocument.Statement.find((s: any) => s.Action === 'ses:SendEmail');
+  expect(statement.Condition).toEqual({ StringEquals: { 'ses:FromAddress': 'sender@example.com' } });
+  expect(JSON.stringify(statement.Resource)).toContain(':identity/*');
+  template.hasResourceProperties('AWS::Lambda::Function', {
+    Handler: 'rewriter.handler.handler',
+    Environment: { Variables: Match.objectLike({ SENDER_EMAIL: 'sender@example.com' }) },
+  });
 });

@@ -14,6 +14,7 @@ const doneJob: Job = {
   status: 'DONE',
   stage: 'done',
   downloadUrl: 'https://example.com/file.pdf',
+  email: { status: 'SENT', message: null },
   result: {
     score: 80,
     summary: 'Python engineer.',
@@ -26,6 +27,7 @@ const doneJob: Job = {
 async function fill(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Resume'), LONG)
   await user.type(screen.getByLabelText('Job description'), LONG)
+  await user.type(screen.getByLabelText(/email/i), 'me@example.com')
 }
 
 describe('App', () => {
@@ -43,6 +45,15 @@ describe('App', () => {
     expect(button).toBeEnabled()
   })
 
+  it('keeps submit disabled for an invalid email', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByLabelText('Resume'), LONG)
+    await user.type(screen.getByLabelText('Job description'), LONG)
+    await user.type(screen.getByLabelText(/email/i), 'not-an-email')
+    expect(screen.getByRole('button', { name: /tailor my resume/i })).toBeDisabled()
+  })
+
   it('submits, polls, and renders the result with a download link and gap list', async () => {
     const user = userEvent.setup()
     vi.spyOn(api, 'submitJob').mockResolvedValue('j1')
@@ -54,7 +65,22 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText('Python engineer.')).toBeInTheDocument())
     expect(screen.getByText('Built APIs in Python.')).toBeInTheDocument()
     expect(screen.getByText('Kubernetes')).toBeInTheDocument()
+    expect(screen.getByText(/we emailed this draft/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /download pdf/i })).toHaveAttribute('href', 'https://example.com/file.pdf')
+  })
+
+  it('explains a failed email while keeping the download link', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(api, 'submitJob').mockResolvedValue('j1')
+    vi.spyOn(api, 'getJob').mockResolvedValue({
+      ...doneJob,
+      email: { status: 'FAILED', message: 'Recipient must be verified in SES sandbox.' },
+    })
+    render(<App />)
+    await fill(user)
+    await user.click(screen.getByRole('button', { name: /tailor my resume/i }))
+    expect(await screen.findByText(/must be verified in SES sandbox/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /download pdf/i })).toBeInTheDocument()
   })
 
   it('shows the server message when submit is rejected', async () => {

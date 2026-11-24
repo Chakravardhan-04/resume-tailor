@@ -20,5 +20,6 @@ export interface Job {
   stage: string | null
   result?: TailoredResult
   downloadUrl?: string
+  email?: { status: 'SENT' | 'FAILED' | 'SKIPPED'; message: string | null }
   error?: { code: string | null; message: string | null }
 }

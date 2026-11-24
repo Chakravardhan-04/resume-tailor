@@ -8,15 +8,15 @@ afterEach(() => vi.restoreAllMocks())
 describe('api', () => {
   it('submits both documents and returns the job id', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(202, { jobId: 'abc' }))
-    await expect(submitJob('r', 'j')).resolves.toBe('abc')
+    await expect(submitJob('r', 'j', 'me@example.com')).resolves.toBe('abc')
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/submit')
-    expect(JSON.parse(String(init?.body))).toEqual({ resume: 'r', jobDescription: 'j' })
+    expect(JSON.parse(String(init?.body))).toEqual({ resume: 'r', jobDescription: 'j', email: 'me@example.com' })
   })
 
   it('surfaces the server error message', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(400, { error: 'The resume is too short.' }))
-    await expect(submitJob('r', 'j')).rejects.toThrow('The resume is too short.')
+    await expect(submitJob('r', 'j', 'me@example.com')).rejects.toThrow('The resume is too short.')
   })
 
   it('maps network failures to a friendly ApiError', async () => {
