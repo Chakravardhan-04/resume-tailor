@@ -1,0 +1,23 @@
+{
+  "jobId": "f859bfa1-81eb-44e1-89fa-372b3e952629",
+  "gapRequirements": [
+    "Infrastructure as code with Terraform or AWS CDK",
+    "Experience with Kubernetes and Docker",
+    "Experience with event-driven architectures (SQS, EventBridge)",
+    "AWS Certified Developer or Solutions Architect certification"
+  ],
+  "gapTerms": [
+    "Architect",
+    "CDK",
+    "Certified",
+    "Docker",
+    "EventBridge",
+    "Infrastructure",
+    "Kubernetes",
+    "SQS",
+    "Solutions",
+    "Terraform"
+  ],
+  "gapTermsFoundInDraft": [],
+  "unsupportedClaimWordsInDraft": []
+}

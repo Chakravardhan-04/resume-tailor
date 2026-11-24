@@ -1,0 +1,25 @@
+{
+  "forcedFailure": {
+    "statesEntered": [
+      "Analyze",
+      "MarkJobFailed",
+      "PipelineFailed"
+    ],
+    "stageError": {
+      "error": "InputError",
+      "message": "The job description is missing for this job. Please submit both a resume and a job description."
+    },
+    "job": {
+      "status": "FAILED",
+      "stage": "analyzer",
+      "errorCode": "InputError",
+      "errorMessage": "The job description is missing for this job. Please submit both a resume and a job description."
+    }
+  },
+  "lengthCap": {
+    "statusCode": 400,
+    "body": {
+      "error": "The resume is too long (maximum 15000 characters)."
+    }
+  }
+}
