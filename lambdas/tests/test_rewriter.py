@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from common import jobs, llm, pdf, storage
+from common import jobs, llm, mailer, pdf, storage
 from common.errors import GuardrailError
 from common.guardrails import numbers_supported
 from rewriter import handler as rewriter
@@ -91,6 +91,10 @@ def test_handler_stores_pdf_marks_done_and_never_lists_gaps_as_bullets(monkeypat
     monkeypatch.setattr(storage, "read_inputs", lambda _id: (resume, "job"))
     monkeypatch.setattr(storage, "put_pdf", lambda k, d: stored.update({k: d}))
     monkeypatch.setattr(jobs, "mark_done", lambda j, r, k: done.update({"result": r, "key": k}))
+    monkeypatch.setattr(jobs, "get_job", lambda _id: {"email": "me@example.com"})
+    monkeypatch.setattr(jobs, "set_email_status", lambda j, s, m=None: done.update({"email_status": s}))
+    sent = []
+    monkeypatch.setattr(mailer, "send_result_email", lambda to, r, p: sent.append((to, r, p)) or ("SENT", None))
     _patch_llm(
         monkeypatch,
         drafts=[draft([HONEST], summary="Python engineer. token AKIAABCDEFGHIJKLMNOP")] * 3,
@@ -107,3 +111,23 @@ def test_handler_stores_pdf_marks_done_and_never_lists_gaps_as_bullets(monkeypat
     assert done["result"]["gaps"][0]["requirement"] == "Kubernetes"
     assert all("Kubernetes" not in b for b in done["result"]["bullets"])
     assert audit == ["rewriter"]
+    # the emailed content is the same redacted result as the stored one, with the PDF attached
+    assert sent[0][0] == "me@example.com"
+    assert "AKIA" not in json.dumps(sent[0][1])
+    assert sent[0][2] == b"%PDF-fake"
+    assert done["email_status"] == "SENT" and out["emailStatus"] == "SENT"
+
+
+def test_deliver_email_skips_without_address(monkeypatch):
+    monkeypatch.setattr(jobs, "get_job", lambda _id: {})
+    assert rewriter.deliver_email("j1", {}, b"") == "SKIPPED"
+
+
+def test_deliver_email_never_raises(monkeypatch):
+    monkeypatch.setattr(jobs, "get_job", lambda _id: {"email": "me@example.com"})
+
+    def boom(*_):
+        raise RuntimeError("ses exploded")
+
+    monkeypatch.setattr(mailer, "send_result_email", boom)
+    assert rewriter.deliver_email("j1", {}, b"") == "FAILED"

@@ -11,7 +11,7 @@ import json
 import logging
 from typing import Any
 
-from common import config, jobs, llm, pdf, prompts, storage
+from common import config, jobs, llm, mailer, pdf, prompts, storage
 from common.errors import GuardrailError
 from common.guardrails import numbers_supported, quote_in_source, redact_secrets_deep
 from common.stage import stage_handler
@@ -122,6 +122,20 @@ def tailor(resume: str, requirements: list[dict], match: dict[str, Any]) -> dict
     return {"summary": best[0], "bullets": [b["text"] for b in best[1]]}
 
 
+def deliver_email(job_id: str, result: dict[str, Any], pdf_bytes: bytes) -> str:
+    """Send the result by email if the user gave an address. Never raises: the job result is already safe."""
+    try:
+        recipient = (jobs.get_job(job_id) or {}).get("email")
+        if not recipient:
+            return "SKIPPED"
+        status, message = mailer.send_result_email(recipient, result, pdf_bytes)
+        jobs.set_email_status(job_id, status, message)
+        return status
+    except Exception:
+        logger.exception("email delivery failed for job=%s", job_id)
+        return "FAILED"
+
+
 @stage_handler("rewriter")
 def _run(event: dict[str, Any]) -> dict[str, Any]:
     job_id = event["jobId"]
@@ -140,9 +154,11 @@ def _run(event: dict[str, Any]) -> dict[str, Any]:
     result = redact_secrets_deep(result)  # output guardrail: no leaked secrets
 
     key = storage.result_key(job_id)
-    storage.put_pdf(key, pdf.build_pdf(result))
-    jobs.mark_done(job_id, result, key)  # DONE only after the PDF is safely stored
-    return {"resultKey": key, "result": result}
+    pdf_bytes = pdf.build_pdf(result)
+    storage.put_pdf(key, pdf_bytes)
+    email_status = deliver_email(job_id, result, pdf_bytes)  # before DONE so the page sees the outcome
+    jobs.mark_done(job_id, result, key)  # DONE only after the PDF is stored and email attempted
+    return {"resultKey": key, "result": result, "emailStatus": email_status}
 
 
 handler = _run

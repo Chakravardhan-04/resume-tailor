@@ -36,18 +36,27 @@ def _expires_at() -> int:
     return int(time.time()) + config.record_ttl_seconds()
 
 
-def create_job(job_id: str) -> None:
-    _tbl().put_item(
-        Item={
-            "jobId": job_id,
-            "sk": META,
-            "status": "RUNNING",
-            "stage": "queued",
-            "createdAt": _now(),
-            "updatedAt": _now(),
-            "expiresAt": _expires_at(),
-        },
-        ConditionExpression="attribute_not_exists(jobId)",
+def create_job(job_id: str, email: str | None = None) -> None:
+    item: dict[str, Any] = {
+        "jobId": job_id,
+        "sk": META,
+        "status": "RUNNING",
+        "stage": "queued",
+        "createdAt": _now(),
+        "updatedAt": _now(),
+        "expiresAt": _expires_at(),
+    }
+    if email:
+        item["email"] = email  # removed as soon as the email has been attempted
+    _tbl().put_item(Item=item, ConditionExpression="attribute_not_exists(jobId)")
+
+
+def set_email_status(job_id: str, status: str, message: str | None = None) -> None:
+    """Record the email outcome and delete the stored address (data minimisation)."""
+    _tbl().update_item(
+        Key={"jobId": job_id, "sk": META},
+        UpdateExpression="SET emailStatus = :s, emailMessage = :m, updatedAt = :u REMOVE email",
+        ExpressionAttributeValues={":s": status, ":m": message or "", ":u": _now()},
     )
 
 

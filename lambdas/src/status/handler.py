@@ -29,6 +29,7 @@ def handler(event, _context=None):
     if job["status"] == "DONE":
         body["result"] = jobs.to_plain(job.get("result"))
         body["downloadUrl"] = storage.presign_pdf(job["resultKey"])  # generated per poll; never stored
+        body["email"] = {"status": job.get("emailStatus", "SKIPPED"), "message": job.get("emailMessage") or None}
     elif job["status"] == "FAILED":
         body["error"] = {"code": job.get("errorCode"), "message": job.get("errorMessage")}
     return response(200, body)

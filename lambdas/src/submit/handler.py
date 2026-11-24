@@ -8,7 +8,7 @@ import boto3
 
 from common import config, jobs, storage
 from common.errors import InputError
-from common.guardrails import validate_document
+from common.guardrails import validate_document, validate_email
 from common.http import parse_json_body, response
 
 logger = logging.getLogger()
@@ -29,6 +29,7 @@ def handler(event, _context=None):
         body = parse_json_body(event)
         resume = validate_document("resume", body.get("resume"))
         job_text = validate_document("job description", body.get("jobDescription"))
+        email = validate_email(body.get("email"))
     except ValueError as exc:
         return response(400, {"error": str(exc)})
     except InputError as exc:
@@ -38,7 +39,7 @@ def handler(event, _context=None):
     try:
         storage.put_text(storage.input_key(job_id, "resume"), resume)
         storage.put_text(storage.input_key(job_id, "job"), job_text)
-        jobs.create_job(job_id)
+        jobs.create_job(job_id, email)
         _stepfunctions().start_execution(
             stateMachineArn=config.state_machine_arn(), name=job_id, input=json.dumps({"jobId": job_id})
         )

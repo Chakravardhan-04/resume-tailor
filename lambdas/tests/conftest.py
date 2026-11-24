@@ -6,6 +6,7 @@ import pytest
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("DATA_BUCKET", "test-bucket")
 os.environ.setdefault("JOBS_TABLE", "test-table")
+os.environ.setdefault("SENDER_EMAIL", "sender@example.com")
 os.environ.setdefault("STATE_MACHINE_ARN", "arn:aws:states:us-east-1:123456789012:stateMachine:test")
 
 
@@ -32,6 +33,7 @@ def block_aws(monkeypatch):
     monkeypatch.setattr("common.jobs._tbl", blocked)
     monkeypatch.setattr("common.storage._client", blocked)
     monkeypatch.setattr("common.llm._bedrock", blocked)
+    monkeypatch.setattr("common.mailer._ses", blocked)
 
 
 @pytest.fixture

@@ -9,6 +9,7 @@ from submit import handler as submit
 
 JOB_ID = "123e4567-e89b-42d3-a456-426614174000"
 LONG = "x" * 80
+EMAIL = "me@example.com"
 
 
 class FakeSfn:
@@ -24,7 +25,7 @@ def wired(monkeypatch):
     sfn, puts, created = FakeSfn(), {}, []
     monkeypatch.setattr(submit, "_stepfunctions", lambda: sfn)
     monkeypatch.setattr(storage, "put_text", lambda k, t: puts.update({k: t}))
-    monkeypatch.setattr(jobs, "create_job", lambda j: created.append(j))
+    monkeypatch.setattr(jobs, "create_job", lambda j, e=None: created.append((j, e)))
     return sfn, puts, created
 
 
@@ -34,10 +35,10 @@ def event(body):
 
 def test_submit_starts_execution(wired):
     sfn, puts, created = wired
-    res = submit.handler(event({"resume": LONG, "jobDescription": LONG}))
+    res = submit.handler(event({"resume": LONG, "jobDescription": LONG, "email": " me@example.com "}))
     body = json.loads(res["body"])
     assert res["statusCode"] == 202
-    assert created == [body["jobId"]]
+    assert created == [(body["jobId"], "me@example.com")]
     assert set(puts) == {f"uploads/{body['jobId']}/resume.txt", f"uploads/{body['jobId']}/job.txt"}
     assert json.loads(sfn.started[0]["input"]) == {"jobId": body["jobId"]}
     assert sfn.started[0]["name"] == body["jobId"]
@@ -46,10 +47,13 @@ def test_submit_starts_execution(wired):
 @pytest.mark.parametrize(
     "body",
     [
-        {"resume": LONG},  # missing JD
-        {"jobDescription": LONG},  # missing resume
-        {"resume": "short", "jobDescription": LONG},
-        {"resume": "x" * 15001, "jobDescription": LONG},
+        {"resume": LONG, "email": EMAIL},  # missing JD
+        {"jobDescription": LONG, "email": EMAIL},  # missing resume
+        {"resume": "short", "jobDescription": LONG, "email": EMAIL},
+        {"resume": "x" * 15001, "jobDescription": LONG, "email": EMAIL},
+        {"resume": LONG, "jobDescription": LONG},  # missing email
+        {"resume": LONG, "jobDescription": LONG, "email": "not-an-email"},
+        {"resume": LONG, "jobDescription": LONG, "email": "a@b.com\r\nBcc: x@y.com"},
     ],
 )
 def test_submit_rejects_bad_input_without_side_effects(wired, body):
@@ -70,7 +74,7 @@ def test_submit_returns_500_when_start_fails(wired, monkeypatch):
         raise RuntimeError("sfn down")
 
     wired[0].start_execution = boom
-    res = submit.handler(event({"resume": LONG, "jobDescription": LONG}))
+    res = submit.handler(event({"resume": LONG, "jobDescription": LONG, "email": EMAIL}))
     assert res["statusCode"] == 500
     assert "sfn down" not in res["body"]
 
@@ -98,6 +102,13 @@ def test_status_done_includes_fresh_download_url(monkeypatch):
     body = json.loads(status.handler({"pathParameters": {"jobId": JOB_ID}})["body"])
     assert body["result"] == {"score": 80}
     assert body["downloadUrl"] == "https://signed/results/x.pdf"
+    assert body["email"] == {"status": "SKIPPED", "message": None}
+
+
+def test_status_never_returns_the_stored_email_address(monkeypatch):
+    item = {"status": "RUNNING", "stage": "scorer", "email": "secret@example.com"}
+    monkeypatch.setattr(jobs, "get_job", lambda _id: item)
+    assert "secret@example.com" not in status.handler({"pathParameters": {"jobId": JOB_ID}})["body"]
 
 
 def test_status_failed_shows_clear_message(monkeypatch):

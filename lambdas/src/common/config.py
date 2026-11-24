@@ -46,3 +46,8 @@ def download_url_ttl_seconds() -> int:
 def record_ttl_seconds() -> int:
     """How long job + audit records live in DynamoDB."""
     return _int("RECORD_TTL_SECONDS", 30 * 24 * 3600)
+
+
+def sender_email() -> str:
+    """Verified SES sender address (empty when email is not configured)."""
+    return os.environ.get("SENDER_EMAIL", "")

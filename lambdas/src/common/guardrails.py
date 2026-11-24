@@ -33,6 +33,19 @@ def validate_document(name: str, text: Any) -> str:
     return cleaned
 
 
+_EMAIL = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9-]{1,63})+$")
+
+
+def validate_email(value: Any) -> str:
+    """Return a normalized email address or raise InputError. Rejects header-injection characters."""
+    if not isinstance(value, str) or not value.strip():
+        raise InputError("Please enter an email address to receive the result.")
+    email = value.strip()
+    if len(email) > 254 or not _EMAIL.match(email):
+        raise InputError("Please enter a valid email address.")
+    return email
+
+
 def redact_secrets(text: str) -> str:
     """Replace anything that looks like a credential."""
     for pattern in _SECRET_PATTERNS:
