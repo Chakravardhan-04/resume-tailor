@@ -122,6 +122,9 @@ test('api exposes only submit and status routes, with throttling', () => {
     (r: any) => r.Properties.RouteKey,
   );
   expect(routes.sort()).toEqual(['GET /api/jobs/{jobId}', 'POST /api/submit']);
+  const stage = Object.values(template.findResources('AWS::ApiGatewayV2::Stage'))[0] as any;
+  const routeIds = Object.keys(template.findResources('AWS::ApiGatewayV2::Route'));
+  expect(stage.DependsOn).toEqual(expect.arrayContaining(routeIds)); // RouteSettings need existing routes
   template.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
     RouteSettings: { 'POST /api/submit': { ThrottlingRateLimit: 1, ThrottlingBurstLimit: 3 } },
   });
