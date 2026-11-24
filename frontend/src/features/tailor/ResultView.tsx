@@ -120,7 +120,7 @@ export function ResultView({ result, downloadUrl, email, onReset }: Props) {
                 {result.matched.map((m) => (
                   <li key={m.requirement}>
                     <strong>{m.requirement}</strong>
-                    <blockquote>{m.evidence}</blockquote>
+                    <blockquote>{m.evidence.replace(/\s*(?:\.{3,}|…)\s*/g, ' … ')}</blockquote>
                   </li>
                 ))}
               </ul>

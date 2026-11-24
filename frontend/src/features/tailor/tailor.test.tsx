@@ -31,7 +31,10 @@ const result: NonNullable<Job['result']> = {
     { requirement: 'Terraform or AWS CDK', category: 'must_have', reason: 'Only AWS SAM is mentioned.' },
     { requirement: 'Kubernetes', category: 'nice_to_have', reason: 'Not in resume.' },
   ],
-  matched: [{ requirement: 'Strong Python skills', evidence: 'Built REST APIs in Python and Flask' }],
+  matched: [
+    { requirement: 'Strong Python skills', evidence: 'Built REST APIs in Python and Flask' },
+    { requirement: 'AWS serverless', evidence: 'Designed DynamoDB tables....Deployed serverless services' },
+  ],
 }
 
 const doneJob: Job = {
@@ -114,7 +117,8 @@ describe('ResultView', () => {
     render(<ResultView result={result} downloadUrl="https://example.com/file.pdf" onReset={() => undefined} />)
     expect(screen.getByRole('img', { name: 'Match score 67 out of 100' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Partial match' })).toBeInTheDocument()
-    expect(screen.getByText(/evidence for 1 of 3 requirements/i)).toBeInTheDocument()
+    expect(screen.getByText(/evidence for 2 of 4 requirements/i)).toBeInTheDocument()
+    expect(screen.getByText('Designed DynamoDB tables … Deployed serverless services')).toBeInTheDocument()
     expect(screen.getByText('Built APIs in Python.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /must have/i })).toBeInTheDocument()
     expect(screen.getByText('Terraform or AWS CDK')).toBeInTheDocument()
