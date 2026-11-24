@@ -168,7 +168,10 @@ test('only the rewriter can send email, and only from the configured sender', ()
   const policies = Object.values(template.findResources('AWS::IAM::Policy')) as any[];
   const withSes = policies.filter((p) => JSON.stringify(p.Properties.PolicyDocument).includes('ses:SendEmail'));
   expect(withSes).toHaveLength(1);
-  const statement = withSes[0].Properties.PolicyDocument.Statement.find((s: any) => s.Action === 'ses:SendEmail');
+  const statement = withSes[0].Properties.PolicyDocument.Statement.find(
+    (s: any) => Array.isArray(s.Action) && s.Action.includes('ses:SendEmail'),
+  );
+  expect(statement.Action).toEqual(['ses:SendEmail', 'ses:SendRawEmail']); // raw MIME is authorized as SendRawEmail
   expect(statement.Condition).toEqual({ StringEquals: { 'ses:FromAddress': 'sender@example.com' } });
   expect(JSON.stringify(statement.Resource)).toContain(':identity/*');
   template.hasResourceProperties('AWS::Lambda::Function', {

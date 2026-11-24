@@ -1,6 +1,7 @@
 """Email the tailored draft + gap list (PDF attached) through SES."""
 
 import logging
+import re
 from email.message import EmailMessage
 from typing import Any
 
@@ -59,8 +60,11 @@ def send_result_email(recipient: str, result: dict[str, Any], pdf: bytes) -> tup
             Content={"Raw": {"Data": message.as_bytes()}},
         )
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
-        logger.warning("SES send failed: %s", code)
+        err = exc.response.get("Error", {})
+        code = err.get("Code", "")
+        # The AWS message names the failing resource; mask addresses so logs hold no personal data.
+        detail = re.sub(r"[^\s/:@]+@[^\s/:]+", "<email>", str(err.get("Message", "")))
+        logger.warning("SES send failed: %s: %s", code, detail)
         if code in {"MessageRejected", "MailFromDomainNotVerifiedException"}:
             return "FAILED", (
                 "The email could not be sent. While the SES account is in sandbox mode, "

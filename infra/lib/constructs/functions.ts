@@ -120,7 +120,8 @@ export class Functions extends Construct {
     const stack = Stack.of(this);
     fn.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ['ses:SendEmail'],
+        // SESv2 SendEmail with Raw content (needed for the PDF attachment) is authorized as ses:SendRawEmail.
+        actions: ['ses:SendEmail', 'ses:SendRawEmail'],
         resources: [`arn:${stack.partition}:ses:${stack.region}:${stack.account}:identity/*`],
         conditions: { StringEquals: { 'ses:FromAddress': senderEmail } },
       }),
