@@ -16,6 +16,14 @@ from common.guardrails import gap_terms, honesty_problems, quote_in_source, reda
 from common.stage import stage
 
 MAX_ATTEMPTS = 3  # bounded: write -> check -> verify at most 3 times
+LOW_MATCH_SCORE = 20  # below this (or with no must-have matched) the job does not fit the resume
+
+
+def is_low_match(match: dict) -> bool:
+    """True when the resume shows almost nothing the job asks for, so tailoring would not help."""
+    must_matched = any(m["category"] == "must_have" for m in match["matched"])
+    return match["score"] < LOW_MATCH_SCORE or not must_matched
+
 
 DRAFT_SCHEMA = {
     "type": "object",
@@ -114,10 +122,14 @@ def handler(event: dict) -> dict:
     resume = tools.read_inputs(inputs.get("resume_key"), inputs.get("job_key"))["resume_text"]
     match = event["match"]  # stage 2's output, carried in the state
 
-    draft = tailor(resume, match)
+    # Low match: skip the rewrite (no AI calls) and return only the score and the gap list.
+    low_match = is_low_match(match)
+    draft = {"summary": "", "bullets": []} if low_match else tailor(resume, match)
+    print(f"rewrite low_match={low_match} score={match['score']}")
     result = redact(  # output guardrail: no leaked secrets in the page, PDF, email or audit log
         {
             "score": match["score"],
+            "lowMatch": low_match,
             "summary": draft["summary"],
             "bullets": draft["bullets"],
             "gaps": [{"requirement": g["requirement"], "category": g["category"], "reason": g["reason"]} for g in match["gaps"]],

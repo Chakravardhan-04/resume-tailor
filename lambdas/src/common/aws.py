@@ -199,13 +199,17 @@ def build_pdf(result: dict) -> bytes:
     styles = getSampleStyleSheet()
     p = lambda text, style="BodyText": Paragraph(escape(text), styles[style])  # escape: model text is untrusted
     gaps = [f"{g['requirement']} ({g['category'].replace('_', ' ')}): {g['reason']}" for g in result["gaps"]]
-    story = [
-        p("Tailored Resume Draft", "Title"),
-        p(f"Match score: {result['score']}/100"),
-        p("Summary", "Heading2"),
-        p(result["summary"]),
-        p("Tailored bullets", "Heading2"),
-        ListFlowable([p(b) for b in result["bullets"]], bulletType="bullet"),
+    story = [p("Tailored Resume Draft", "Title"), p(f"Match score: {result['score']}/100")]
+    if result.get("lowMatch"):
+        story.append(p("This job does not match your resume, so no tailored draft was written. See the gap list below."))
+    else:
+        story += [
+            p("Summary", "Heading2"),
+            p(result["summary"]),
+            p("Tailored bullets", "Heading2"),
+            ListFlowable([p(b) for b in result["bullets"]], bulletType="bullet"),
+        ]
+    story += [
         p("Gap list (requirements your resume does not show yet)", "Heading2"),
         ListFlowable([p(g) for g in gaps] or [p("No gaps.")], bulletType="bullet"),
     ]
@@ -215,8 +219,11 @@ def build_pdf(result: dict) -> bytes:
 
 
 def email_text(result: dict) -> str:
-    lines = [f"Match score: {result['score']}/100", "", "SUMMARY", result["summary"], "", "TAILORED BULLETS"]
-    lines += [f"- {b}" for b in result["bullets"]]
+    lines = [f"Match score: {result['score']}/100", ""]
+    if result.get("lowMatch"):
+        lines += ["This job does not match your resume, so no tailored draft was written."]
+    else:
+        lines += ["SUMMARY", result["summary"], "", "TAILORED BULLETS"] + [f"- {b}" for b in result["bullets"]]
     lines += ["", "GAP LIST"] + [f"- {g['requirement']}: {g['reason']}" for g in result["gaps"]]
     return "\n".join(lines + ["", "The PDF is attached. Review the draft before sending it to employers."])
 

@@ -59,6 +59,15 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Tailor my resume' })).toBeDisabled()
   })
 
+  it('shows a no-match message instead of a draft for a different job', async () => {
+    const low = { ...done, result: { ...done.result!, score: 0, lowMatch: true, summary: '', bullets: [], matched: [] } }
+    vi.spyOn(api, 'getJob').mockResolvedValue(low)
+    render(<JobView jobId="j1" onReset={() => {}} />)
+    expect(await screen.findByText('This job does not match your resume')).toBeInTheDocument()
+    expect(screen.queryByText('Tailored bullets')).not.toBeInTheDocument()
+    expect(screen.getByText('Kubernetes')).toBeInTheDocument() // the gap list is still shown
+  })
+
   it('shows the clear message from a failed pipeline', async () => {
     vi.spyOn(api, 'getJob').mockResolvedValue({ status: 'FAILED', stage: 'analyzer', error: 'The job description is missing for this job.' })
     render(<JobView jobId="j1" onReset={() => {}} />)

@@ -42,3 +42,12 @@ def test_nothing_honest_fails_closed(monkeypatch, resume):
     fake_agents(monkeypatch, [{"summary": "Expert.", "bullets": [{"text": "Ran Kubernetes.", "source_quote": "nope"}]}] * 3)
     with pytest.raises(GuardrailError):
         rewriter.tailor(resume, MATCH)
+
+
+def test_low_match_skips_the_rewrite():
+    """A completely different job: nothing must-have matched, so no draft is written."""
+    no_match = {"score": 0, "matched": [], "gaps": MATCH["gaps"]}
+    weak = {"score": 30, "matched": [{"requirement": "Git", "category": "nice_to_have", "evidence": "x"}], "gaps": []}
+    assert rewriter.is_low_match(no_match)
+    assert rewriter.is_low_match(weak)  # no must-have matched
+    assert not rewriter.is_low_match(MATCH)

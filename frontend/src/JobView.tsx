@@ -92,17 +92,26 @@ function ResultView({ job, result, onReset }: { job: Job; result: Result; onRese
       )}
 
       <div className="grid">
-        <div className="stack">
+        {result.lowMatch ? (
+          // Nothing in the resume fits this job, so no draft was written (honesty: we never invent a fit).
           <section className="card">
-            <h2>Summary</h2>
-            <p>{result.summary}</p>
+            <h2>This job does not match your resume</h2>
+            <p>Your resume shows none of the job's key requirements, so we did not write a tailored draft.</p>
+            <p className="hint">The gap list shows what this role needs that your resume does not show yet.</p>
           </section>
-          <section className="card">
-            <h2>Tailored bullets</h2>
-            <ul>{result.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
-            <p className="hint">Every bullet is based on a line in your resume and was fact-checked against it.</p>
-          </section>
-        </div>
+        ) : (
+          <div className="stack">
+            <section className="card">
+              <h2>Summary</h2>
+              <p>{result.summary}</p>
+            </section>
+            <section className="card">
+              <h2>Tailored bullets</h2>
+              <ul>{result.bullets.map((b) => <li key={b}>{b}</li>)}</ul>
+              <p className="hint">Every bullet is based on a line in your resume and was fact-checked against it.</p>
+            </section>
+          </div>
+        )}
 
         <div className="stack">
           <section className="card">

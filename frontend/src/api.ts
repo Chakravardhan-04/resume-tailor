@@ -9,6 +9,7 @@ export interface Gap {
 
 export interface Result {
   score: number
+  lowMatch?: boolean // true when the job does not fit the resume: no draft, only the gap list
   summary: string
   bullets: string[]
   gaps: Gap[]
