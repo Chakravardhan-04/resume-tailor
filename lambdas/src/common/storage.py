@@ -1,11 +1,9 @@
-"""S3 access: read_inputs tool, result PDF, presigned download URLs."""
+"""S3 access: input documents, result PDF, presigned download URLs."""
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
 
 from common import config
-from common.errors import InputError
 
 _s3 = None
 
@@ -62,21 +60,3 @@ def presign_pdf(key: str, filename: str = "tailored-resume.pdf") -> str:
         },
         ExpiresIn=config.download_url_ttl_seconds(),
     )
-
-
-def read_inputs(job_id: str) -> tuple[str, str]:
-    """Tool `read_inputs`: load (resume, job description) for a job.
-
-    A missing document escalates with a clear, user-facing message.
-    """
-    docs = {}
-    for name, label in (("resume", "resume"), ("job", "job description")):
-        try:
-            docs[name] = get_text(input_key(job_id, name))
-        except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
-                raise InputError(
-                    f"The {label} could not be found for this job. Please submit both a resume and a job description."
-                ) from exc
-            raise
-    return docs["resume"], docs["job"]

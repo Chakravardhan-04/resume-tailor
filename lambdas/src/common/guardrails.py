@@ -136,6 +136,16 @@ CLAIM_TERMS = (
 _WORD = re.compile(r"[A-Za-z][A-Za-z-]*")
 
 
+def _stems(text: str) -> set[str]:
+    """Stems of every word, plus the parts of hyphenated words ("Kubernetes-ready" -> kubernetes, ready)."""
+    out = set()
+    for word in _WORD.findall(text):
+        out.add(_stem(word))
+        if "-" in word:
+            out.update(_stem(part) for part in word.split("-") if part)
+    return out
+
+
 def _stem(word: str) -> str:
     """Crude suffix stripping so "managed", "manages" and "managing" compare equal."""
     word = word.lower()
@@ -145,8 +155,7 @@ def _stem(word: str) -> str:
 
 def unsupported_claims(text: str, source: str) -> list[str]:
     """Claim terms used in `text` that the source never uses, compared on word stems."""
-    text_stems = {_stem(w) for w in _WORD.findall(text)}
-    source_stems = {_stem(w) for w in _WORD.findall(source)}
+    text_stems, source_stems = _stems(text), _stems(source)
     text_lower, source_lower = text.lower(), source.lower()
     found, seen = [], set()
     for term in CLAIM_TERMS:
@@ -161,11 +170,72 @@ def unsupported_claims(text: str, source: str) -> list[str]:
     return found
 
 
+_GENERIC = {
+    "experience",
+    "strong",
+    "knowledge",
+    "ability",
+    "familiarity",
+    "understanding",
+    "proficiency",
+    "hands-on",
+    "excellent",
+    "good",
+    "solid",
+    "nice",
+    "must",
+    "have",
+    "years",
+    "year",
+    "plus",
+    "bonus",
+    "preferred",
+    "degree",
+    "with",
+    "and",
+    "or",
+    "the",
+    "of",
+    "in",
+    "using",
+    "working",
+    "a",
+    "an",
+}
+
+
+def gap_terms(gap_requirements: list[str], source: str) -> list[str]:
+    """Distinctive terms (names, acronyms) from unmet requirements that the source never mentions.
+
+    Example: gap "Experience with Kubernetes and Docker" on a resume without either -> ["Docker", "Kubernetes"].
+    """
+    source_stems = _stems(source)
+    terms = set()
+    for requirement in gap_requirements:
+        for word in _WORD.findall(requirement):
+            distinctive = word[0].isupper() or (len(word) >= 2 and word.isupper())
+            if distinctive and word.lower() not in _GENERIC and _stem(word) not in source_stems:
+                terms.add(word)
+    return sorted(terms)
+
+
+def mentions_any(text: str, terms: list[str]) -> list[str]:
+    """Which of `terms` appear in `text` (stem match, case-insensitive)."""
+    text_stems = _stems(text)
+    return [t for t in terms if _stem(t) in text_stems]
+
+
+_ELLIPSIS = re.compile(r"\s*(?:\.\.\.|\u2026)\s*")
+
+
 def quote_in_source(quote: str, source: str) -> bool:
     """True if `quote` appears verbatim (ignoring whitespace/case) in `source`.
 
-    Backbone of the honesty guardrail: any claim the model makes must point at
-    text that really exists in the original resume.
+    A quote may join several exact excerpts with "..."; every excerpt must then be in the source.
+    Backbone of the honesty guardrail: any claim the model makes must point at text that really
+    exists in the original resume.
     """
-    q = _normalize(quote)
-    return len(q) >= 3 and q in _normalize(source)
+    src = _normalize(source)
+    parts = [_normalize(p) for p in _ELLIPSIS.split(quote)]
+    parts = [p.strip(" .;,") for p in parts if p.strip(" .;,")]
+    return bool(parts) and all(len(p) >= 3 and p in src for p in parts)

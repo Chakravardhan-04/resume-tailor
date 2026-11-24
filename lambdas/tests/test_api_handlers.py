@@ -55,7 +55,9 @@ def test_submit_uses_the_verified_account_email_and_owner(wired):
     # the body's email is ignored: the recipient is always the authenticated user
     assert created == [(body["jobId"], EMAIL, USER)]
     assert set(puts) == {f"uploads/{body['jobId']}/resume.txt", f"uploads/{body['jobId']}/job.txt"}
-    assert json.loads(sfn.started[0]["input"]) == {"jobId": body["jobId"]}
+    keys = {"resume_key": f"uploads/{body['jobId']}/resume.txt", "job_key": f"uploads/{body['jobId']}/job.txt"}
+    # the state machine input is the pipeline's memory: job id plus where the documents are
+    assert json.loads(sfn.started[0]["input"]) == {"jobId": body["jobId"], "inputs": keys}
     assert sfn.started[0]["name"] == body["jobId"]
 
 

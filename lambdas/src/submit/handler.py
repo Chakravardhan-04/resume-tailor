@@ -49,11 +49,15 @@ def handler(event, _context=None):
 
     job_id = str(uuid.uuid4())
     try:
-        storage.put_text(storage.input_key(job_id, "resume"), resume)
-        storage.put_text(storage.input_key(job_id, "job"), job_text)
+        inputs = {"resume_key": storage.input_key(job_id, "resume"), "job_key": storage.input_key(job_id, "job")}
+        storage.put_text(inputs["resume_key"], resume)
+        storage.put_text(inputs["job_key"], job_text)
         jobs.create_job(job_id, email, user_id)
+        # The state carries the S3 keys; each stage loads the documents with the read_inputs tool.
         _stepfunctions().start_execution(
-            stateMachineArn=config.state_machine_arn(), name=job_id, input=json.dumps({"jobId": job_id})
+            stateMachineArn=config.state_machine_arn(),
+            name=job_id,
+            input=json.dumps({"jobId": job_id, "inputs": inputs}),
         )
     except Exception:
         logger.exception("submit failed for job=%s", job_id)

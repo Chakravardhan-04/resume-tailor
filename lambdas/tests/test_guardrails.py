@@ -65,6 +65,13 @@ def test_quote_in_source_rejects_invented_text():
     assert not guardrails.quote_in_source("Managed Kubernetes clusters", "Built APIs in Python")
 
 
+def test_quote_in_source_accepts_ellipsis_joined_excerpts():
+    src = "Deployed services with AWS Lambda.\nDesigned DynamoDB tables."
+    assert guardrails.quote_in_source("Deployed services with AWS Lambda ... Designed DynamoDB tables", src)
+    assert guardrails.quote_in_source("Deployed services\u2026DynamoDB tables.", src)
+    assert not guardrails.quote_in_source("Deployed services ... ran Kubernetes", src)
+
+
 def test_quote_in_source_rejects_empty():
     assert not guardrails.quote_in_source("", "anything")
 
@@ -82,3 +89,15 @@ def test_quote_in_source_rejects_empty():
 )
 def test_unsupported_claims(text, source, expected):
     assert guardrails.unsupported_claims(text, source) == expected
+
+
+def test_gap_terms_are_distinctive_words_missing_from_the_resume():
+    resume = "Built APIs on AWS with Python. Experience with Docker basics."
+    gaps = ["Experience with Kubernetes and Docker", "Infrastructure as code with Terraform or AWS CDK"]
+    assert guardrails.gap_terms(gaps, resume) == ["CDK", "Infrastructure", "Kubernetes", "Terraform"]
+
+
+def test_mentions_any_matches_stems_case_insensitively():
+    assert guardrails.mentions_any("Ran kubernetes clusters", ["Kubernetes", "Terraform"]) == ["Kubernetes"]
+    assert guardrails.mentions_any("Built APIs", ["Kubernetes"]) == []
+    assert guardrails.mentions_any("Kubernetes-ready engineer", ["Kubernetes"]) == ["Kubernetes"]

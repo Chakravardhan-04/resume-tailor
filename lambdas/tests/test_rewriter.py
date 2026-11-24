@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from common import jobs, llm, mailer, pdf, storage
+from common import jobs, mailer, pdf, storage, tools
 from common.errors import GuardrailError
 from common.guardrails import numbers_supported
 from rewriter import handler as rewriter
@@ -34,24 +34,26 @@ def test_numbers_supported():
 
 
 def test_filter_drops_fabricated_quotes_and_numbers(resume):
-    kept, summary_ok, claims = rewriter.filter_deterministic(draft([HONEST, FAKE_QUOTE, FAKE_NUMBER]), resume)
+    kept, summary_issues, bullet_issues = rewriter.filter_deterministic(
+        draft([HONEST, FAKE_QUOTE, FAKE_NUMBER]), resume, []
+    )
     assert kept == [HONEST]
-    assert summary_ok
-    assert claims == ["production"]  # from the dropped Kubernetes bullet
+    assert summary_issues == []
+    assert bullet_issues == ["numbers that are not in the resume", "production"]
 
 
 def test_filter_flags_summary_with_invented_number(resume):
-    _, summary_ok, _ = rewriter.filter_deterministic(draft([HONEST], summary="10 years of Python"), resume)
-    assert not summary_ok
+    _, summary_issues, _ = rewriter.filter_deterministic(draft([HONEST], summary="10 years of Python"), resume, [])
+    assert summary_issues == ["numbers that are not in the resume"]
 
 
 def _patch_llm(monkeypatch, drafts, verdicts):
     drafts, verdicts = iter(drafts), iter(verdicts)
 
-    def fake(system, user, validate, **_):
-        return validate(next(drafts) if "fact-checker" not in system else next(verdicts))
+    def fake(agent, system, user, answer, **_):
+        return answer.validate(next(verdicts) if agent == "verifier" else next(drafts))
 
-    monkeypatch.setattr(llm, "converse_json", fake)
+    monkeypatch.setattr(rewriter, "run_agent", fake)
 
 
 def test_filter_drops_upgraded_scope_and_invented_outcomes(resume):
@@ -61,28 +63,28 @@ def test_filter_drops_upgraded_scope_and_invented_outcomes(resume):
         "source_quote": "REST APIs in Python and Flask",
     }
     led = {"text": "Led a team of 3 engineers on a migration project.", "source_quote": "Led a team of 3 engineers"}
-    kept, summary_ok, claims = rewriter.filter_deterministic(
-        draft([inflated, outcome, led], summary="Expert backend engineer."), resume
+    kept, summary_issues, bullet_issues = rewriter.filter_deterministic(
+        draft([inflated, outcome, led], summary="Expert backend engineer."), resume, []
     )
     assert kept == [led]  # "Led" appears in the resume, so it is allowed
-    assert not summary_ok
-    assert claims == ["expert", "improving", "managed", "production"]
+    assert summary_issues == ["expert"]
+    assert bullet_issues == ["improving", "managed", "production"]
 
 
 def test_tailor_feeds_unsupported_words_back_to_the_model(monkeypatch, resume):
     inflated = {"text": "Managed production REST APIs in Python.", "source_quote": "REST APIs in Python and Flask"}
     prompts_seen = []
 
-    def fake(system, user, validate, **_):
-        if "fact-checker" in system:
-            return validate({"summary_supported": True, "unsupported_bullets": []})
+    def fake(agent, system, user, answer, **_):
+        if agent == "verifier":
+            return answer.validate({"summary_supported": True, "unsupported_bullets": []})
         prompts_seen.append(user)
-        return validate(draft([inflated] if len(prompts_seen) == 1 else [HONEST]))
+        return answer.validate(draft([inflated] if len(prompts_seen) == 1 else [HONEST]))
 
-    monkeypatch.setattr(llm, "converse_json", fake)
+    monkeypatch.setattr(rewriter, "run_agent", fake)
     out = rewriter.tailor(resume, MATCH)
     assert out["bullets"] == [HONEST["text"]]
-    assert "Do not use these words" in prompts_seen[1] and "production" in prompts_seen[1]
+    assert "In the bullets, do not use: managed, production." in prompts_seen[1]
 
 
 def test_tailor_removes_bullets_flagged_by_verifier(monkeypatch, resume):
@@ -106,11 +108,11 @@ def test_tailor_is_bounded(monkeypatch, resume):
     calls = []
     monkeypatch.setenv("MAX_AGENT_ITERATIONS", "2")
 
-    def fake(system, user, validate, **_):
-        calls.append(system[:20])
-        return validate(draft([FAKE_QUOTE]))
+    def fake(agent, system, user, answer, **_):
+        calls.append(agent)
+        return answer.validate(draft([FAKE_QUOTE]))
 
-    monkeypatch.setattr(llm, "converse_json", fake)
+    monkeypatch.setattr(rewriter, "run_agent", fake)
     with pytest.raises(GuardrailError):
         rewriter.tailor(resume, MATCH)
     assert len(calls) == 2
@@ -120,7 +122,7 @@ def test_handler_stores_pdf_marks_done_and_never_lists_gaps_as_bullets(monkeypat
     stored, done, audit = {}, {}, []
     monkeypatch.setattr("common.jobs.set_stage", lambda *_: None)
     monkeypatch.setattr("common.jobs.write_audit", lambda j, s, o: audit.append(s))
-    monkeypatch.setattr(storage, "read_inputs", lambda _id: (resume, "job"))
+    monkeypatch.setattr(tools, "read_inputs", lambda **_: {"resume_text": resume, "job_text": "job"})
     monkeypatch.setattr(storage, "put_pdf", lambda k, d: stored.update({k: d}))
     monkeypatch.setattr(jobs, "mark_done", lambda j, r, k: done.update({"result": r, "key": k}))
     monkeypatch.setattr(jobs, "get_job", lambda _id: {"email": "me@example.com"})
@@ -135,7 +137,14 @@ def test_handler_stores_pdf_marks_done_and_never_lists_gaps_as_bullets(monkeypat
     monkeypatch.setattr(pdf, "build_pdf", lambda r: b"%PDF-fake")
 
     # summary contains a secret-like string: output guardrail must redact it
-    out = rewriter.handler({"jobId": "j1", "analysis": {"requirements": REQS}, "match": MATCH})
+    out = rewriter.handler(
+        {
+            "jobId": "j1",
+            "inputs": {"resume_key": "k1", "job_key": "k2"},
+            "analysis": {"requirements": REQS},
+            "match": MATCH,
+        }
+    )
 
     assert out["resultKey"] == "results/j1.pdf" == done["key"]
     assert stored["results/j1.pdf"] == b"%PDF-fake"
@@ -163,3 +172,42 @@ def test_deliver_email_never_raises(monkeypatch):
 
     monkeypatch.setattr(mailer, "send_result_email", boom)
     assert rewriter.deliver_email("j1", {}, b"") == "FAILED"
+
+
+def test_jd_demanding_an_absent_skill_puts_it_in_gaps_never_in_bullets(monkeypatch, resume):
+    """Honesty acceptance test: the JD wants Kubernetes, the resume has none, the model keeps trying to add it."""
+    fabricated = {"text": "Deployed services to AWS and Kubernetes.", "source_quote": "Deployed services to AWS"}
+    sneaky = {"text": "Containerised Lambda services for Kubernetes.", "source_quote": "Deployed services to AWS"}
+    prompts_seen = []
+
+    def fake(agent, system, user, answer, **_):
+        if agent == "verifier":
+            return answer.validate({"summary_supported": True, "unsupported_bullets": []})
+        prompts_seen.append(user)
+        return answer.validate(draft([HONEST, fabricated, sneaky], summary="Python engineer, Kubernetes-ready."))
+
+    monkeypatch.setattr(rewriter, "run_agent", fake)
+    out = rewriter.tailor(resume, MATCH)
+
+    assert "Kubernetes" in prompts_seen[0]  # passed to the model as a gap it must not mention
+    assert "In the summary, remove: Kubernetes" in prompts_seen[1]  # told exactly what was rejected
+    assert out["bullets"] == [HONEST["text"]]
+    assert out["summary"] == "Python and Flask."  # verbatim matched evidence, because every summary claimed it
+    assert all("kubernetes" not in text.lower() for text in out["bullets"] + [out["summary"]])
+
+
+def test_good_summary_is_kept_even_if_a_later_attempt_breaks_it(monkeypatch, resume):
+    led = {"text": "Led a team of 3 engineers on a migration project.", "source_quote": "Led a team of 3 engineers"}
+    # attempt 1: good summary, one bullet dropped (so the loop continues); attempt 2: more bullets, bad summary
+    drafts = iter([draft([HONEST, FAKE_QUOTE]), draft([HONEST, led], summary="Expert engineer.")])
+
+    def fake(agent, system, user, answer, **_):
+        if agent == "verifier":
+            return answer.validate({"summary_supported": True, "unsupported_bullets": []})
+        return answer.validate(next(drafts))
+
+    monkeypatch.setenv("MAX_AGENT_ITERATIONS", "2")
+    monkeypatch.setattr(rewriter, "run_agent", fake)
+    out = rewriter.tailor(resume, MATCH)
+    assert out["summary"] == "Backend engineer with Python experience."
+    assert out["bullets"] == [HONEST["text"], led["text"]]
