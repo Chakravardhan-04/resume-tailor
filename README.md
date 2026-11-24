@@ -6,7 +6,7 @@ A multi-agent pipeline on AWS. You sign in, paste a resume and a job description
 
 - a tailored summary and bullets, written **only from facts in your resume**
 - an honest **gap list** of requirements the resume does not meet
-- a **PDF**, shown on the page and **emailed** to you through SES
+- a **PDF** to download, and an **Email me this draft** button that sends it to you through SES
 
 Live demo: https://d3a7a5yx4axqt.cloudfront.net (demo only)
 
@@ -21,7 +21,7 @@ flowchart LR
   CF -->|website| S3W[(S3 site bucket)]
   CF -->|/api/*| API[API Gateway<br/>JWT check]
   API -->|POST /api/submit| SUB[submit λ]
-  API -->|GET /api/jobs/id| STA[status λ]
+  API -->|GET /api/jobs/id<br/>POST /api/jobs/id/email| STA[status λ]
   SUB -->|resume + job| S3D[(S3 data bucket)]
   SUB -->|start| SFN
   subgraph SFN[Step Functions]
@@ -30,8 +30,8 @@ flowchart LR
   A & B & C -->|converse| BR[Bedrock<br/>Claude Sonnet 4.6]
   A & B & C -->|status + audit log| DDB[(DynamoDB)]
   C -->|PDF| S3D
-  C -->|email + PDF| SES[SES]
   STA --> DDB
+  STA -->|email + PDF on request| SES[SES]
 ```
 
 | Step | What happens | Code |
@@ -39,8 +39,9 @@ flowchart LR
 | 1. Submit | Check the login token and both documents' length, save them to S3, start the state machine, return a job id at once (the pipeline takes longer than API Gateway's 29 s limit) | `lambdas/src/submit/handler.py` |
 | 2. Analyze | Agent extracts the job's requirements (must have / nice to have) | `lambdas/src/analyzer/handler.py` |
 | 3. Score | Agent finds a word-for-word resume quote for each requirement; no quote means it is a gap. The score is computed in code | `lambdas/src/scorer/handler.py` |
-| 4. Rewrite | Agent rewrites the summary and bullets, the honesty guardrail removes anything unsupported, then PDF + email | `lambdas/src/rewriter/handler.py` |
+| 4. Rewrite | Agent rewrites the summary and bullets, the honesty guardrail removes anything unsupported, then saves the PDF. If the job does not fit the resume at all (score under 20 or no must-have matched), it skips the rewrite and returns only the gap list | `lambdas/src/rewriter/handler.py` |
 | 5. Poll | The page calls the status API every 3 s and shows the result | `lambdas/src/status/handler.py`, `frontend/src/JobView.tsx` |
+| 6. Email | When the user is happy, **Email me this draft** sends the PDF to their verified account address (once per job) | `lambdas/src/status/handler.py` |
 
 **State passing.** The Step Functions state is the pipeline's memory. It starts as `{jobId, inputs: {resume_key, job_key}}`, and each stage adds its output at `$.analysis`, `$.match` and `$.rewrite`.
 
@@ -142,9 +143,9 @@ A real run on the deployed stack, using **Try a sample** (a fictional resume). A
 | 1. Sign in | ![](docs/demo/screenshots/01-sign-in.png) |
 | 2. Paste or upload both documents | ![](docs/demo/screenshots/02-tailor-form.png) |
 | 3. The three stages run | ![](docs/demo/screenshots/03-processing.png) |
-| 4. Score, draft, gap list, PDF, email sent | ![](docs/demo/screenshots/04-result.png) |
+| 4. Score, draft, gap list, Download PDF, Email me this draft | ![](docs/demo/screenshots/04-result.png) |
 
-Result: score **67/100**, 5 of 9 requirements matched, 5 bullets, and 4 gaps (Terraform/CDK, Kubernetes/Docker, SQS/EventBridge, AWS certification). None of the gap skills appear in the draft. The email arrived with the PDF attached. The whole run took about 12 seconds. Files: [`result.json`](docs/demo/result.json), [`tailored-resume.pdf`](docs/demo/tailored-resume.pdf).
+Result: score **67/100**, 5 of 9 requirements matched, 5 bullets, and 4 gaps (Terraform/CDK, Kubernetes/Docker, SQS/EventBridge, AWS certification). None of the gap skills appear in the draft. The email with the PDF attached arrived after clicking the button (Gmail may put it in Spam, because the sender is a gmail.com address sent through SES). The whole run took about 12 seconds. Files: [`result.json`](docs/demo/result.json), [`tailored-resume.pdf`](docs/demo/tailored-resume.pdf).
 
 **Agent loops in the logs** ([`agent-loop-log.txt`](docs/demo/agent-loop-log.txt)). On the first attempt, the summary was rejected by the honesty check and sent back. The second attempt passed:
 
@@ -183,7 +184,7 @@ Each stage saves its output to the `chakri_ResumeTailor_Jobs` table. The demo jo
 |---|---|---|
 | `AUDIT#2026-11-24T18:03:10.103+00:00#analyzer` | analyzer | 9 requirements (6 must have, 3 nice to have) |
 | `AUDIT#2026-11-24T18:03:12.838+00:00#scorer` | scorer | score 67, 5 matches with resume quotes, 4 gaps with reasons |
-| `AUDIT#2026-11-24T18:03:20.093+00:00#rewriter` | rewriter | final draft and gaps, PDF key, `emailStatus: SENT` |
+| `AUDIT#2026-11-24T18:03:20.093+00:00#rewriter` | rewriter | final draft and gaps, PDF key |
 
 ```jsonc
 // analyzer
@@ -194,7 +195,7 @@ Each stage saves its output to the `chakri_ResumeTailor_Jobs` table. The demo jo
  "gaps":    [{"id": "R5", "requirement": "Infrastructure as code with Terraform or AWS CDK",
               "reason": "The resume mentions AWS SAM for deployment but does not reference Terraform or AWS CDK.", ...}]}
 // rewriter
-{"resultKey": "results/0113af1f-2580-4bd0-8842-42c81a3359c1.pdf", "emailStatus": "SENT", "result": {"summary": "...", "bullets": [...], "gaps": [...]}}
+{"resultKey": "results/0113af1f-2580-4bd0-8842-42c81a3359c1.pdf", "result": {"summary": "...", "bullets": [...], "gaps": [...]}}
 ```
 
 Export the audit log for any job:

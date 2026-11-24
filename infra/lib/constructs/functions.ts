@@ -66,13 +66,13 @@ export class Functions extends Construct {
     this.analyzer = fn('Analyzer', 'analyzer', 120);
     this.scorer = fn('Scorer', 'scorer', 120);
     this.rewriter = fn('Rewriter', 'rewriter', 300);
-    this.rewriter.addEnvironment('SENDER_EMAIL', props.senderEmail);
+    this.status.addEnvironment('SENDER_EMAIL', props.senderEmail);
 
     // Least privilege: each function gets only what it uses.
     bucket.grantPut(this.submit, 'uploads/*');
     table.grant(this.submit, 'dynamodb:PutItem', 'dynamodb:UpdateItem'); // job record + daily quota
-    bucket.grantRead(this.status, 'results/*'); // needed to sign the PDF download link
-    table.grant(this.status, 'dynamodb:GetItem');
+    bucket.grantRead(this.status, 'results/*'); // sign the download link + attach the PDF to the email
+    table.grant(this.status, 'dynamodb:GetItem', 'dynamodb:UpdateItem'); // read the job, record the email status
 
     const stack = Stack.of(this);
     for (const stage of [this.analyzer, this.scorer, this.rewriter]) {
@@ -91,8 +91,8 @@ export class Functions extends Construct {
     }
 
     bucket.grantPut(this.rewriter, 'results/*'); // the PDF
-    table.grant(this.rewriter, 'dynamodb:GetItem'); // reads the recipient address
-    this.rewriter.addToRolePolicy(
+    // Only the status Lambda can email, and only from our verified sender.
+    this.status.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ses:SendEmail', 'ses:SendRawEmail'], // raw MIME is needed for the PDF attachment
         resources: [`arn:aws:ses:${stack.region}:${stack.account}:identity/*`],

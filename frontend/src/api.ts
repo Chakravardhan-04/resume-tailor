@@ -21,7 +21,7 @@ export interface Job {
   stage: string
   result?: Result
   downloadUrl?: string
-  email?: { status: string; message: string }
+  emailStatus?: string | null // 'SENT' once the user has emailed it
   error?: string
 }
 
@@ -41,3 +41,6 @@ export const submitJob = (resume: string, jobDescription: string) =>
 
 /** GET /api/jobs/{id} -> status, current stage, and the result once DONE. */
 export const getJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}`)
+
+/** POST /api/jobs/{id}/email -> email the draft (with the PDF) to the signed-in user's address. */
+export const emailJob = (jobId: string) => request<{ emailStatus: string }>(`/api/jobs/${jobId}/email`, { method: 'POST' })

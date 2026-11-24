@@ -37,7 +37,7 @@ test('every API route needs a Cognito JWT', () => {
   for (const route of resources('AWS::ApiGatewayV2::Route')) expect(route.Properties.AuthorizationType).toBe('JWT');
 });
 
-test('only the 3 specialists can call Bedrock, only the rewriter can email', () => {
+test('only the 3 specialists can call Bedrock, and one function can email', () => {
   const policies = resources('AWS::IAM::Policy').map((p) => JSON.stringify(p.Properties.PolicyDocument));
   expect(policies.filter((p) => p.includes('bedrock:InvokeModel'))).toHaveLength(3);
   expect(policies.filter((p) => p.includes('ses:SendEmail'))).toHaveLength(1);

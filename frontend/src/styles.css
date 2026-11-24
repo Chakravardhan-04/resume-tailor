@@ -61,7 +61,7 @@ textarea { min-height: 320px; padding: 12px; border: 1px solid var(--border); bo
 .count.bad { color: var(--red); font-weight: 600; }
 .actions { display: flex; justify-content: flex-end; align-items: center; gap: 16px; }
 .actions .hint { margin-top: 0; color: var(--red); }
-.actions-left { display: flex; gap: 10px; margin-top: 12px; }
+.actions-left { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 
 /* progress */
 .progress { max-width: 620px; margin: 24px auto; }

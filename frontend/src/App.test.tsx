@@ -18,7 +18,7 @@ const done: api.Job = {
   status: 'DONE',
   stage: 'done',
   downloadUrl: 'https://example.com/file.pdf',
-  email: { status: 'SENT', message: '' },
+  emailStatus: null,
   result: {
     score: 67,
     summary: 'Python engineer.',
@@ -46,7 +46,11 @@ describe('App', () => {
     expect(await screen.findByText('Python engineer.')).toBeInTheDocument()
     expect(screen.getByText('Kubernetes')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute('href', done.downloadUrl)
-    expect(screen.getByText(/we emailed this draft/i)).toBeInTheDocument()
+    // email only when the user asks for it
+    const emailSpy = vi.spyOn(api, 'emailJob').mockResolvedValue({ emailStatus: 'SENT' })
+    await userEvent.click(screen.getByRole('button', { name: 'Email me this draft' }))
+    expect(emailSpy).toHaveBeenCalledWith('j1')
+    expect(await screen.findByText(/check your inbox/i)).toBeInTheDocument()
   })
 
   it('rejects a PDF upload and explains why submit is disabled', async () => {

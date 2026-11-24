@@ -84,6 +84,10 @@ def put_pdf(key: str, data: bytes) -> None:
     s3.put_object(Bucket=BUCKET, Key=key, Body=data, ContentType="application/pdf")
 
 
+def get_pdf(key: str) -> bytes:
+    return s3.get_object(Bucket=BUCKET, Key=key)["Body"].read()
+
+
 def pdf_link(key: str) -> str:
     """Short-lived download link: the bucket itself stays private."""
     return s3.generate_presigned_url(
@@ -225,7 +229,7 @@ def email_text(result: dict) -> str:
     else:
         lines += ["SUMMARY", result["summary"], "", "TAILORED BULLETS"] + [f"- {b}" for b in result["bullets"]]
     lines += ["", "GAP LIST"] + [f"- {g['requirement']}: {g['reason']}" for g in result["gaps"]]
-    return "\n".join(lines + ["", "The PDF is attached. Review the draft before sending it to employers."])
+    return "\n".join(lines + ["", "The PDF is attached."])
 
 
 def send_email(to: str, result: dict, pdf: bytes) -> tuple[str, str]:

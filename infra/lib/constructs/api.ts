@@ -36,17 +36,25 @@ export class Api extends Construct {
       integration: new integrations.HttpLambdaIntegration('SubmitIntegration', props.functions.submit),
       authorizer,
     });
+    const statusIntegration = new integrations.HttpLambdaIntegration('StatusIntegration', props.functions.status);
     const statusRoutes = this.httpApi.addRoutes({
       path: '/api/jobs/{jobId}',
       methods: [apigw.HttpMethod.GET],
-      integration: new integrations.HttpLambdaIntegration('StatusIntegration', props.functions.status),
+      integration: statusIntegration,
+      authorizer,
+    });
+    // "Email me this draft" button: same Lambda, POST method.
+    const emailRoutes = this.httpApi.addRoutes({
+      path: '/api/jobs/{jobId}/email',
+      methods: [apigw.HttpMethod.POST],
+      integration: statusIntegration,
       authorizer,
     });
 
     // Throttling limits Bedrock cost: submit allows 1 request/second (burst 3).
     const stage = this.httpApi.defaultStage?.node.defaultChild as apigw.CfnStage;
     // Route-level settings must reference routes that already exist, so create the routes first.
-    for (const route of [...submitRoutes, ...statusRoutes]) stage.node.addDependency(route);
+    for (const route of [...submitRoutes, ...statusRoutes, ...emailRoutes]) stage.node.addDependency(route);
     stage.defaultRouteSettings = { throttlingRateLimit: 10, throttlingBurstLimit: 20 };
     // routeSettings is an untyped map in L1, so keys must be PascalCase CloudFormation names.
     stage.routeSettings = {

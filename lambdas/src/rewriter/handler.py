@@ -1,4 +1,4 @@
-"""Stage 3 - rewriter: write a tailored summary + bullets WITHOUT inventing anything, then deliver.
+"""Stage 3 - rewriter: write a tailored summary + bullets WITHOUT inventing anything, then save the PDF.
 
 Honesty guardrail (the prompt asks nicely; the code below enforces it):
     1. each bullet must quote the resume line it is based on (source_quote), word for word
@@ -137,15 +137,8 @@ def handler(event: dict) -> dict:
         }
     )
 
-    # Deliver: PDF to S3, email through SES, then mark the job DONE.
+    # Deliver: store the PDF, then mark the job DONE. The user emails it from the page when happy with it.
     pdf_key = f"results/{job_id}.pdf"
-    pdf = aws.build_pdf(result)
-    aws.put_pdf(pdf_key, pdf)
-    email_status, email_message = aws.send_email(aws.get_job(job_id)["email"], result, pdf)
+    aws.put_pdf(pdf_key, aws.build_pdf(result))
     aws.mark_done(job_id, result, pdf_key)
-    aws.table.update_item(  # record the email outcome and delete the address (privacy)
-        Key={"jobId": job_id, "sk": "META"},
-        UpdateExpression="SET emailStatus = :s, emailMessage = :m REMOVE email",
-        ExpressionAttributeValues={":s": email_status, ":m": email_message},
-    )
-    return {"resultKey": pdf_key, "emailStatus": email_status, "result": result}  # -> state $.rewrite
+    return {"resultKey": pdf_key, "result": result}  # -> state $.rewrite

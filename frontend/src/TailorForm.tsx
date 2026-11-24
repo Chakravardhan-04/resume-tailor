@@ -110,7 +110,7 @@ export default function TailorForm({ email, onSubmitted }: { email: string; onSu
       <div className="page-head">
         <div>
           <h1>Tailor your resume</h1>
-          <p className="muted">Results appear here and are emailed to <strong>{email}</strong>.</p>
+          <p className="muted">Results appear here. You can email them to <strong>{email}</strong>.</p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={() => { setResume(SAMPLE_RESUME); setJob(SAMPLE_JOB) }}>
           Try a sample

@@ -42,7 +42,7 @@ export default function AuthForm({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <form className="card auth" onSubmit={submit} aria-label={title}>
       <h1>{title}</h1>
-      <p className="muted">Results are shown here and emailed to your account address.</p>
+      <p className="muted">Results are shown here, and you can email them to your account address.</p>
 
       <label>
         Email

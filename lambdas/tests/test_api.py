@@ -43,3 +43,30 @@ def test_stage_failure_is_recorded_for_the_user(fake_aws):
     assert fake_aws["jobs"]["j1"]["status"] == "FAILED"
     assert "job description is missing" in fake_aws["jobs"]["j1"]["error"]
     assert fake_aws["audit"] == []
+
+
+def test_email_is_sent_only_when_the_user_asks(monkeypatch):
+    from status import handler as status
+
+    job = {
+        "userId": "u1",
+        "status": "DONE",
+        "email": "me@example.com",
+        "resultKey": "results/j1.pdf",
+        "result": {"score": 80, "summary": "s", "bullets": ["b"], "gaps": []},
+    }
+    sent, updates = [], []
+    monkeypatch.setattr(aws, "get_job", lambda j: job)
+    monkeypatch.setattr(aws, "get_pdf", lambda k: b"%PDF")
+    monkeypatch.setattr(aws, "send_email", lambda to, r, p: sent.append(to) or ("SENT", ""))
+    monkeypatch.setattr(aws, "table", type("T", (), {"update_item": lambda self, **k: updates.append(k)})())
+
+    post = {"pathParameters": {"jobId": "j1"}, **CLAIMS}
+    post["requestContext"] = {**CLAIMS["requestContext"], "http": {"method": "POST"}}
+    res = status.handler(post)
+
+    assert res["statusCode"] == 200 and sent == ["me@example.com"]
+    assert "REMOVE email" in updates[0]["UpdateExpression"]  # address deleted after sending
+
+    other = {**post, "requestContext": {"http": {"method": "POST"}, "authorizer": {"jwt": {"claims": {"sub": "u2"}}}}}
+    assert status.handler(other)["statusCode"] == 404  # cannot email someone else's job

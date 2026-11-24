@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { type Gap, getJob, type Job, type Result } from './api'
+import { emailJob, type Gap, getJob, type Job, type Result } from './api'
 
 const STAGES = [
   { key: 'analyzer', label: 'Reading the job requirements' },
@@ -45,7 +45,7 @@ export default function JobView({ jobId, onReset }: { jobId: string; onReset: ()
   }
 
   if (job?.status === 'DONE' && job.result) {
-    return <ResultView job={job} result={job.result} onReset={onReset} />
+    return <ResultView jobId={jobId} job={job} result={job.result} onReset={onReset} />
   }
 
   // Still running: show which of the three Step Functions stages is active.
@@ -63,7 +63,35 @@ export default function JobView({ jobId, onReset }: { jobId: string; onReset: ()
   )
 }
 
-function ResultView({ job, result, onReset }: { job: Job; result: Result; onReset: () => void }) {
+/** "Email me this draft": the user decides when to send it. */
+function EmailButton({ jobId, alreadySent }: { jobId: string; alreadySent: boolean }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent'>(alreadySent ? 'sent' : 'idle')
+  const [error, setError] = useState('')
+
+  async function send() {
+    setState('sending')
+    setError('')
+    try {
+      await emailJob(jobId)
+      setState('sent')
+    } catch (err) {
+      setError((err as Error).message) // e.g. the address is not verified in SES sandbox mode
+      setState('idle')
+    }
+  }
+
+  if (state === 'sent') return <p className="alert alert-success">Sent. Check your inbox (and the Spam folder) for the PDF.</p>
+  return (
+    <>
+      <button className="btn" onClick={send} disabled={state === 'sending'}>
+        {state === 'sending' ? 'Sending…' : 'Email me this draft'}
+      </button>
+      {error && <p className="alert alert-error" role="alert">{error}</p>}
+    </>
+  )
+}
+
+function ResultView({ jobId, job, result, onReset }: { jobId: string; job: Job; result: Result; onReset: () => void }) {
   const mustHave = result.gaps.filter((g) => g.category === 'must_have')
   const niceToHave = result.gaps.filter((g) => g.category !== 'must_have')
 
@@ -80,16 +108,11 @@ function ResultView({ job, result, onReset }: { job: Job; result: Result; onRese
           </p>
           <div className="actions-left">
             <a className="btn btn-primary" href={job.downloadUrl}>Download PDF</a>
-            <button className="btn" onClick={onReset}>Tailor another</button>
+            <EmailButton jobId={jobId} alreadySent={job.emailStatus === 'SENT'} />
+            <button className="btn btn-ghost" onClick={onReset}>Tailor another</button>
           </div>
         </div>
       </section>
-
-      {job.email?.status === 'SENT' ? (
-        <p className="alert alert-success">We emailed this draft, with the PDF attached, to your account address.</p>
-      ) : (
-        <p className="alert alert-warning">Email not sent: {job.email?.message}</p>
-      )}
 
       <div className="grid">
         {result.lowMatch ? (
