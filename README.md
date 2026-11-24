@@ -100,7 +100,11 @@ frontend/    React + Vite app
 
 Prerequisites: Node 22+, Python 3 with pip, AWS CLI with credentials for the target account.
 
-1. **Enable Bedrock model access** for Anthropic Claude Sonnet 4.6 in us-east-1 (Bedrock console, Model access). Calls fail without it.
+1. **Enable Bedrock access to Anthropic Claude Sonnet 4.6** in us-east-1. First-time Anthropic users must submit the use-case form once (Bedrock console, Model catalog, Anthropic). Until then every call fails with `Operation not allowed`. Check with:
+   ```bash
+   aws bedrock get-foundation-model-availability --region us-east-1 --model-id anthropic.claude-sonnet-4-6
+   ```
+   `authorizationStatus` must be `AUTHORIZED`.
 2. **Verify SES addresses** in us-east-1. New accounts are in SES sandbox mode, so both the sender and every recipient (each user's account email) must be verified:
    ```bash
    aws sesv2 create-email-identity --region us-east-1 --email-identity you@example.com
@@ -120,6 +124,10 @@ Prerequisites: Node 22+, Python 3 with pip, AWS CLI with credentials for the tar
    cd infra && npx cdk deploy -c senderEmail=you@example.com
    ```
    The `SiteUrl` output is the app. Open it, create an account, enter the code Cognito emails you, then sign in. Use an address you verified in SES. The Lambda dependency layer is built locally with `pip` (Linux wheels), or with Docker if pip is unavailable.
+
+### Resource names
+
+Resources are prefixed `chakri_ResumeTailor_` (for example `chakri_ResumeTailor_Analyzer`, `chakri_ResumeTailor_Jobs`, `chakri_ResumeTailor_Pipeline`, `chakri_ResumeTailor_Users`). AWS does not allow underscores in CloudFormation stack names or S3 bucket names, so those use `chakri-ResumeTailor` and `chakri-resumetailor-{data,site}-<account>-<region>`. Helper resources that CDK creates internally (the S3 auto-delete provider and its role) keep generated names. Everything is tagged `project=chakri_ResumeTailor`. Explicit names mean a rename needs a destroy and redeploy.
 
 ### Clean up
 

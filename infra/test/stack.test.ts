@@ -11,7 +11,7 @@ beforeAll(() => {
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'dist-'));
   fs.writeFileSync(path.join(dist, 'index.html'), '<html></html>');
   const app = new App();
-  const stack = new ResumeTailorStack(app, 'Test', {
+  const stack = new ResumeTailorStack(app, 'chakri-ResumeTailor', {
     env: { account: '123456789012', region: 'us-east-1' },
     frontendDistPath: dist,
     senderEmail: 'sender@example.com',
@@ -172,4 +172,37 @@ test('only the rewriter can send email, and only from the configured sender', ()
     Handler: 'rewriter.handler.handler',
     Environment: { Variables: Match.objectLike({ SENDER_EMAIL: 'sender@example.com' }) },
   });
+});
+
+test('named resources carry the chakri_ResumeTailor_ prefix (hyphenated where AWS forbids underscores)', () => {
+  const names = (type: string, key: string) =>
+    Object.values(template.findResources(type)).map((r: any) => r.Properties[key]);
+
+  expect(names('AWS::Lambda::Function', 'FunctionName').filter(Boolean).sort()).toEqual([
+    'chakri_ResumeTailor_Analyzer',
+    'chakri_ResumeTailor_Rewriter',
+    'chakri_ResumeTailor_Scorer',
+    'chakri_ResumeTailor_Status',
+    'chakri_ResumeTailor_Submit',
+  ]);
+  expect(names('AWS::DynamoDB::Table', 'TableName')).toEqual(['chakri_ResumeTailor_Jobs']);
+  expect(names('AWS::StepFunctions::StateMachine', 'StateMachineName')).toEqual(['chakri_ResumeTailor_Pipeline']);
+  expect(names('AWS::Cognito::UserPool', 'UserPoolName')).toEqual(['chakri_ResumeTailor_Users']);
+  expect(names('AWS::Cognito::UserPoolClient', 'ClientName')).toEqual(['chakri_ResumeTailor_WebClient']);
+  expect(names('AWS::ApiGatewayV2::Api', 'Name')).toEqual(['chakri_ResumeTailor_Api']);
+  expect(names('AWS::Lambda::LayerVersion', 'LayerName')).toEqual(['chakri_ResumeTailor_DepsLayer']);
+
+  const buckets = names('AWS::S3::Bucket', 'BucketName').filter(Boolean).sort();
+  expect(buckets).toEqual([
+    'chakri-resumetailor-data-123456789012-us-east-1',
+    'chakri-resumetailor-site-123456789012-us-east-1',
+  ]);
+  for (const b of buckets) expect(b).toMatch(/^[a-z0-9.-]{3,63}$/);
+
+  const roles = names('AWS::IAM::Role', 'RoleName').filter(Boolean) as string[];
+  expect(roles.length).toBeGreaterThanOrEqual(6);
+  for (const r of roles) {
+    expect(r.startsWith('chakri_ResumeTailor_')).toBe(true);
+    expect(r.length).toBeLessThanOrEqual(64);
+  }
 });

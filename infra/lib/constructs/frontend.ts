@@ -6,6 +6,7 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
+import { BUCKET_PREFIX, NAME_PREFIX } from '../config';
 import { Auth } from './auth';
 
 export interface FrontendProps {
@@ -26,7 +27,9 @@ export class Frontend extends Construct {
       throw new Error(`Frontend build not found at ${props.distPath}. Run "npm ci && npm run build" in frontend/ first.`);
     }
 
+    const { account, region } = Stack.of(this);
     const siteBucket = new s3.Bucket(this, 'SiteBucket', {
+      bucketName: `${BUCKET_PREFIX}-site-${account}-${region}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
@@ -35,6 +38,7 @@ export class Frontend extends Construct {
     });
 
     const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
+      responseHeadersPolicyName: `${NAME_PREFIX}SecurityHeaders`,
       securityHeadersBehavior: {
         contentSecurityPolicy: {
           override: true,
@@ -56,6 +60,7 @@ export class Frontend extends Construct {
     const apiHost = Fn.select(2, Fn.split('/', props.httpApi.apiEndpoint));
 
     this.distribution = new cloudfront.Distribution(this, 'Distribution', {
+      comment: `${NAME_PREFIX}Site`,
       defaultRootObject: 'index.html',
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       defaultBehavior: {

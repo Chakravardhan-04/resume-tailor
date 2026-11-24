@@ -1,8 +1,9 @@
-import { Duration } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy } from 'aws-cdk-lib';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import { Construct } from 'constructs';
+import { NAME_PREFIX } from '../config';
 import { Data } from './data';
 import { Functions } from './functions';
 
@@ -84,12 +85,17 @@ export class Pipeline extends Construct {
       .next(stage('Rewrite', functions.rewriter, '$.rewrite', 310));
 
     this.stateMachine = new sfn.StateMachine(this, 'StateMachine', {
+      stateMachineName: `${NAME_PREFIX}Pipeline`,
       definitionBody: sfn.DefinitionBody.fromChainable(definition),
       timeout: Duration.minutes(15),
       tracingEnabled: true,
       logs: {
         // ERROR only and no execution data: state carries resume evidence quotes (personal data).
-        destination: new logs.LogGroup(this, 'StateMachineLogs', { retention: logs.RetentionDays.ONE_MONTH }),
+        destination: new logs.LogGroup(this, 'StateMachineLogs', {
+          logGroupName: `/aws/vendedlogs/states/${NAME_PREFIX}Pipeline`,
+          retention: logs.RetentionDays.ONE_MONTH,
+          removalPolicy: RemovalPolicy.DESTROY,
+        }),
         level: sfn.LogLevel.ERROR,
         includeExecutionData: false,
       },

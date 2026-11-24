@@ -2,6 +2,7 @@ import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import * as authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { Stack } from 'aws-cdk-lib';
+import { NAME_PREFIX } from '../config';
 import { Auth } from './auth';
 import { Construct } from 'constructs';
 import { Functions } from './functions';
@@ -17,6 +18,7 @@ export class Api extends Construct {
     super(scope, id);
 
     this.httpApi = new apigw.HttpApi(this, 'HttpApi', {
+      apiName: `${NAME_PREFIX}Api`,
       description: 'Resume tailoring: submit a job and poll its status',
     });
 

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
-import { AssetHashType, DockerImage, Duration, Stack } from 'aws-cdk-lib';
+import { AssetHashType, DockerImage, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -12,6 +12,7 @@ import {
   MAX_JOBS_PER_USER_PER_DAY,
   MIN_DOC_CHARS,
   MODEL_ID,
+  NAME_PREFIX,
   RESULTS_PREFIX,
   UPLOADS_PREFIX,
 } from '../config';
@@ -45,6 +46,7 @@ export class Functions extends Construct {
       exclude: ['**/__pycache__', '**/*.pyc'],
     });
     this.layer = new lambda.LayerVersion(this, 'DepsLayer', {
+      layerVersionName: `${NAME_PREFIX}DepsLayer`,
       description: 'reportlab (PDF generation)',
       compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
       code: this.buildLayerCode(),
@@ -53,6 +55,7 @@ export class Functions extends Construct {
       DATA_BUCKET: props.data.bucket.bucketName,
       JOBS_TABLE: props.data.table.tableName,
       MODEL_ID,
+  NAME_PREFIX,
       MAX_DOC_CHARS: String(MAX_DOC_CHARS),
       MIN_DOC_CHARS: String(MIN_DOC_CHARS),
       MAX_AGENT_ITERATIONS: String(MAX_AGENT_ITERATIONS),
@@ -92,7 +95,9 @@ export class Functions extends Construct {
     dir: string,
     opts: { timeout: number; memory: number; layer?: boolean },
   ): lambda.Function {
+    const functionName = `${NAME_PREFIX}${id}`;
     return new lambda.Function(this, id, {
+      functionName,
       runtime: lambda.Runtime.PYTHON_3_12,
       architecture: lambda.Architecture.X86_64,
       code: this.code,
@@ -102,7 +107,11 @@ export class Functions extends Construct {
       environment: this.baseEnv,
       layers: opts.layer ? [this.layer] : undefined,
       tracing: lambda.Tracing.ACTIVE,
-      logGroup: new logs.LogGroup(this, `${id}Logs`, { retention: logs.RetentionDays.ONE_MONTH }),
+      logGroup: new logs.LogGroup(this, `${id}Logs`, {
+        logGroupName: `/aws/lambda/${functionName}`,
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     });
   }
 

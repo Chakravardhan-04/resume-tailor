@@ -1,6 +1,7 @@
 import { Duration, RemovalPolicy } from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import { Construct } from 'constructs';
+import { NAME_PREFIX } from '../config';
 
 /** Email + password sign-in. Self sign-up with an emailed verification code. */
 export class Auth extends Construct {
@@ -11,6 +12,7 @@ export class Auth extends Construct {
     super(scope, id);
 
     this.userPool = new cognito.UserPool(this, 'UserPool', {
+      userPoolName: `${NAME_PREFIX}Users`,
       selfSignUpEnabled: true,
       signInAliases: { email: true },
       signInCaseSensitive: false,
@@ -34,6 +36,7 @@ export class Auth extends Construct {
     });
 
     this.client = this.userPool.addClient('WebClient', {
+      userPoolClientName: `${NAME_PREFIX}WebClient`,
       generateSecret: false, // browser app: public client
       // The app calls Cognito directly from the browser, so no hosted UI or callback URLs are needed.
       authFlows: { userPassword: true },
