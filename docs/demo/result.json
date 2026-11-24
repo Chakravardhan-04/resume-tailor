@@ -1,0 +1,64 @@
+{
+  "jobId": "cdc641ec-c629-43cf-b79c-02db6eeb811f",
+  "status": "DONE",
+  "stage": "done",
+  "result": {
+    "bullets": [
+      "Built REST APIs in Python and Flask for an order management system, serving 40,000 requests per day.",
+      "Deployed serverless services with AWS Lambda and API Gateway using AWS SAM.",
+      "Designed DynamoDB tables and access patterns for the product catalogue service.",
+      "Reduced average API latency by 30% by adding caching and query optimisation.",
+      "Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories."
+    ],
+    "gaps": [
+      {
+        "category": "must_have",
+        "reason": "No mention of Terraform or AWS CDK; AWS SAM is referenced but neither Terraform nor CDK appears in the resume.",
+        "requirement": "Infrastructure as code with Terraform or AWS CDK"
+      },
+      {
+        "category": "nice_to_have",
+        "reason": "No mention of Kubernetes or Docker anywhere in the resume.",
+        "requirement": "Experience with Kubernetes and Docker"
+      },
+      {
+        "category": "nice_to_have",
+        "reason": "No mention of SQS, EventBridge, or any event-driven architecture experience in the resume.",
+        "requirement": "Experience with event-driven architectures using SQS or EventBridge"
+      },
+      {
+        "category": "nice_to_have",
+        "reason": "No AWS certification (Developer or Solutions Architect) is listed in the resume.",
+        "requirement": "AWS Certified Developer or Solutions Architect certification"
+      }
+    ],
+    "matched": [
+      {
+        "evidence": "Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS.",
+        "requirement": "3+ years of professional experience in backend development"
+      },
+      {
+        "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day.",
+        "requirement": "Strong Python skills"
+      },
+      {
+        "evidence": "Deployed serverless services with AWS Lambda and API Gateway using AWS SAM.",
+        "requirement": "Hands-on experience with AWS Lambda, API Gateway, and DynamoDB"
+      },
+      {
+        "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day.",
+        "requirement": "Experience designing REST APIs"
+      },
+      {
+        "evidence": "Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories.",
+        "requirement": "Experience with automated testing and CI/CD pipelines"
+      }
+    ],
+    "score": 67,
+    "summary": "Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS. Hands-on with AWS Lambda, API Gateway, and DynamoDB, deploying serverless services using AWS SAM. Experienced in designing REST APIs with Python and Flask, writing automated tests with pytest, and setting up CI pipelines with GitHub Actions."
+  },
+  "email": {
+    "status": "SENT",
+    "message": null
+  }
+}

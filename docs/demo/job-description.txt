@@ -1,0 +1,17 @@
+Backend Engineer (Python, AWS) - CloudScale Labs
+
+About the role
+We are looking for a Backend Engineer to build and run cloud-native services.
+
+Requirements
+- 3+ years of professional experience in backend development
+- Strong Python skills
+- Hands-on experience with AWS serverless services (Lambda, API Gateway, DynamoDB)
+- Experience designing REST APIs
+- Infrastructure as code with Terraform or AWS CDK
+- Experience with automated testing and CI/CD pipelines
+
+Nice to have
+- Kubernetes and Docker
+- Experience with event-driven architectures (SQS, EventBridge)
+- AWS Certified Developer or Solutions Architect certification

@@ -1,0 +1,198 @@
+[
+  {
+    "jobId": "cdc641ec-c629-43cf-b79c-02db6eeb811f",
+    "sk": "AUDIT#2026-11-24T14:16:30.040+00:00#analyzer",
+    "stage": "analyzer",
+    "timestamp": "2026-11-24T14:16:30.040+00:00",
+    "output": {
+      "requirements": [
+        {
+          "id": "R1",
+          "text": "3+ years of professional experience in backend development",
+          "category": "must_have",
+          "type": "experience"
+        },
+        {
+          "id": "R2",
+          "text": "Strong Python skills",
+          "category": "must_have",
+          "type": "skill"
+        },
+        {
+          "id": "R3",
+          "text": "Hands-on experience with AWS Lambda, API Gateway, and DynamoDB",
+          "category": "must_have",
+          "type": "experience"
+        },
+        {
+          "id": "R4",
+          "text": "Experience designing REST APIs",
+          "category": "must_have",
+          "type": "experience"
+        },
+        {
+          "id": "R5",
+          "text": "Infrastructure as code with Terraform or AWS CDK",
+          "category": "must_have",
+          "type": "skill"
+        },
+        {
+          "id": "R6",
+          "text": "Experience with automated testing and CI/CD pipelines",
+          "category": "must_have",
+          "type": "experience"
+        },
+        {
+          "id": "R7",
+          "text": "Experience with Kubernetes and Docker",
+          "category": "nice_to_have",
+          "type": "skill"
+        },
+        {
+          "id": "R8",
+          "text": "Experience with event-driven architectures using SQS or EventBridge",
+          "category": "nice_to_have",
+          "type": "experience"
+        },
+        {
+          "id": "R9",
+          "text": "AWS Certified Developer or Solutions Architect certification",
+          "category": "nice_to_have",
+          "type": "certification"
+        }
+      ]
+    }
+  },
+  {
+    "jobId": "cdc641ec-c629-43cf-b79c-02db6eeb811f",
+    "sk": "AUDIT#2026-11-24T14:16:34.431+00:00#scorer",
+    "stage": "scorer",
+    "timestamp": "2026-11-24T14:16:34.431+00:00",
+    "output": {
+      "score": 67,
+      "matched": [
+        {
+          "id": "R1",
+          "requirement": "3+ years of professional experience in backend development",
+          "category": "must_have",
+          "evidence": "Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS."
+        },
+        {
+          "id": "R2",
+          "requirement": "Strong Python skills",
+          "category": "must_have",
+          "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day."
+        },
+        {
+          "id": "R3",
+          "requirement": "Hands-on experience with AWS Lambda, API Gateway, and DynamoDB",
+          "category": "must_have",
+          "evidence": "Deployed serverless services with AWS Lambda and API Gateway using AWS SAM."
+        },
+        {
+          "id": "R4",
+          "requirement": "Experience designing REST APIs",
+          "category": "must_have",
+          "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day."
+        },
+        {
+          "id": "R6",
+          "requirement": "Experience with automated testing and CI/CD pipelines",
+          "category": "must_have",
+          "evidence": "Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories."
+        }
+      ],
+      "gaps": [
+        {
+          "id": "R5",
+          "requirement": "Infrastructure as code with Terraform or AWS CDK",
+          "category": "must_have",
+          "reason": "No mention of Terraform or AWS CDK; AWS SAM is referenced but neither Terraform nor CDK appears in the resume."
+        },
+        {
+          "id": "R7",
+          "requirement": "Experience with Kubernetes and Docker",
+          "category": "nice_to_have",
+          "reason": "No mention of Kubernetes or Docker anywhere in the resume."
+        },
+        {
+          "id": "R8",
+          "requirement": "Experience with event-driven architectures using SQS or EventBridge",
+          "category": "nice_to_have",
+          "reason": "No mention of SQS, EventBridge, or any event-driven architecture experience in the resume."
+        },
+        {
+          "id": "R9",
+          "requirement": "AWS Certified Developer or Solutions Architect certification",
+          "category": "nice_to_have",
+          "reason": "No AWS certification (Developer or Solutions Architect) is listed in the resume."
+        }
+      ]
+    }
+  },
+  {
+    "jobId": "cdc641ec-c629-43cf-b79c-02db6eeb811f",
+    "sk": "AUDIT#2026-11-24T14:16:45.718+00:00#rewriter",
+    "stage": "rewriter",
+    "timestamp": "2026-11-24T14:16:45.718+00:00",
+    "output": {
+      "resultKey": "results/cdc641ec-c629-43cf-b79c-02db6eeb811f.pdf",
+      "result": {
+        "score": 67,
+        "summary": "Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS. Hands-on with AWS Lambda, API Gateway, and DynamoDB, deploying serverless services using AWS SAM. Experienced in designing REST APIs with Python and Flask, writing automated tests with pytest, and setting up CI pipelines with GitHub Actions.",
+        "bullets": [
+          "Built REST APIs in Python and Flask for an order management system, serving 40,000 requests per day.",
+          "Deployed serverless services with AWS Lambda and API Gateway using AWS SAM.",
+          "Designed DynamoDB tables and access patterns for the product catalogue service.",
+          "Reduced average API latency by 30% by adding caching and query optimisation.",
+          "Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories."
+        ],
+        "gaps": [
+          {
+            "requirement": "Infrastructure as code with Terraform or AWS CDK",
+            "category": "must_have",
+            "reason": "No mention of Terraform or AWS CDK; AWS SAM is referenced but neither Terraform nor CDK appears in the resume."
+          },
+          {
+            "requirement": "Experience with Kubernetes and Docker",
+            "category": "nice_to_have",
+            "reason": "No mention of Kubernetes or Docker anywhere in the resume."
+          },
+          {
+            "requirement": "Experience with event-driven architectures using SQS or EventBridge",
+            "category": "nice_to_have",
+            "reason": "No mention of SQS, EventBridge, or any event-driven architecture experience in the resume."
+          },
+          {
+            "requirement": "AWS Certified Developer or Solutions Architect certification",
+            "category": "nice_to_have",
+            "reason": "No AWS certification (Developer or Solutions Architect) is listed in the resume."
+          }
+        ],
+        "matched": [
+          {
+            "requirement": "3+ years of professional experience in backend development",
+            "evidence": "Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS."
+          },
+          {
+            "requirement": "Strong Python skills",
+            "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day."
+          },
+          {
+            "requirement": "Hands-on experience with AWS Lambda, API Gateway, and DynamoDB",
+            "evidence": "Deployed serverless services with AWS Lambda and API Gateway using AWS SAM."
+          },
+          {
+            "requirement": "Experience designing REST APIs",
+            "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day."
+          },
+          {
+            "requirement": "Experience with automated testing and CI/CD pipelines",
+            "evidence": "Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories."
+          }
+        ]
+      },
+      "emailStatus": "SENT"
+    }
+  }
+]

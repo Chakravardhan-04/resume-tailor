@@ -1,0 +1,23 @@
+Alex Morgan
+Software Engineer | Hyderabad, India
+
+SUMMARY
+Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS.
+
+EXPERIENCE
+Software Engineer, Acme Retail Tech (2022 - present)
+- Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day.
+- Designed DynamoDB tables and access patterns for the product catalogue service.
+- Deployed serverless services with AWS Lambda and API Gateway using AWS SAM.
+- Reduced average API latency by 30% by adding caching and query optimisation.
+- Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories.
+
+Junior Developer, BrightApps (2021 - 2022)
+- Developed internal dashboards in React and JavaScript.
+- Maintained PostgreSQL schemas and wrote SQL reports for the finance team.
+
+SKILLS
+Python, Flask, AWS Lambda, API Gateway, DynamoDB, S3, PostgreSQL, SQL, React, JavaScript, Git, pytest, GitHub Actions
+
+EDUCATION
+B.Tech in Computer Science, 2021
