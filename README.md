@@ -125,6 +125,19 @@ Prerequisites: Node 22+, Python 3 with pip, AWS CLI with credentials for the tar
    ```
    The `SiteUrl` output is the app. Open it, create an account, enter the code Cognito emails you, then sign in. Use an address you verified in SES. The Lambda dependency layer is built locally with `pip` (Linux wheels), or with Docker if pip is unavailable.
 
+### Troubleshooting: `TimeoutError ... did not establish a connection within 10000 ms`
+
+On some networks the local DNS resolver stalls on IPv6 (AAAA) lookups, so Node takes about 15 seconds to resolve AWS hostnames and the CDK asset upload times out. The AWS CLI and curl are not affected. Force Node to request IPv4 addresses for the deploy only:
+
+```bash
+cat > /tmp/ipv4-dns.cjs <<'JS'
+const dns = require('node:dns'); const orig = dns.lookup;
+dns.lookup = (h, o, cb) => { if (typeof o === 'function') { cb = o; o = {}; } else if (typeof o === 'number') { o = { family: o }; } else { o = { ...(o || {}) }; }
+  if (!o.family) o.family = 4; return orig.call(dns, h, o, cb); };
+JS
+NODE_OPTIONS="--require /tmp/ipv4-dns.cjs" npx cdk deploy -c senderEmail=you@example.com
+```
+
 ### Resource names
 
 Resources are prefixed `chakri_ResumeTailor_` (for example `chakri_ResumeTailor_Analyzer`, `chakri_ResumeTailor_Jobs`, `chakri_ResumeTailor_Pipeline`, `chakri_ResumeTailor_Users`). AWS does not allow underscores in CloudFormation stack names or S3 bucket names, so those use `chakri-ResumeTailor` and `chakri-resumetailor-{data,site}-<account>-<region>`. Helper resources that CDK creates internally (the S3 auto-delete provider and its role) keep generated names. Everything is tagged `project=chakri_ResumeTailor`. Explicit names mean a rename needs a destroy and redeploy.
