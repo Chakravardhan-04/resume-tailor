@@ -2,9 +2,9 @@ import { Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
-import { BUCKET_PREFIX, NAME_PREFIX, RESULTS_PREFIX, UPLOADS_PREFIX } from '../config';
+import { BUCKET_PREFIX, NAME_PREFIX } from '../config';
 
-/** Private S3 bucket (inputs + result PDFs) and the job/audit table. */
+/** Private S3 bucket (uploads/ and results/, deleted after 1 day) and the DynamoDB table (jobs + audit log). */
 export class Data extends Construct {
   readonly bucket: s3.Bucket;
   readonly table: dynamodb.Table;
@@ -21,11 +21,11 @@ export class Data extends Construct {
       lifecycleRules: [
         {
           id: 'expire-uploads',
-          prefix: UPLOADS_PREFIX,
+          prefix: 'uploads/',
           expiration: Duration.days(1),
           abortIncompleteMultipartUploadAfter: Duration.days(1),
         },
-        { id: 'expire-results', prefix: RESULTS_PREFIX, expiration: Duration.days(1) },
+        { id: 'expire-results', prefix: 'results/', expiration: Duration.days(1) },
       ],
       // Demo stack: `cdk destroy` removes everything. Switch to RETAIN for real use.
       removalPolicy: RemovalPolicy.DESTROY,

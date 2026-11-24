@@ -1,4 +1,5 @@
 import { Duration, RemovalPolicy } from 'aws-cdk-lib';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
@@ -7,101 +8,71 @@ import { NAME_PREFIX } from '../config';
 import { Data } from './data';
 import { Functions } from './functions';
 
-export interface PipelineProps {
-  data: Data;
-  functions: Functions;
-}
-
 /**
- * analyzer -> scorer -> rewriter. The state object is the pipeline's memory:
- *   $.analysis (requirements)  $.match (score + gaps)  $.rewrite (result + pdf key)
+ * The Step Functions state machine:  Analyze -> Score -> Rewrite
  *
- * Retry: transient/throttling errors and Lambda service errors, with exponential backoff + jitter.
- * Catch: anything else records FAILED on the job (keeping any clearer message the stage already wrote).
+ * The state object is the pipeline's memory. It starts as {jobId, inputs} and each stage adds its output:
+ *   $.analysis (requirements)   $.match (score, matched, gaps)   $.rewrite (result, PDF key, email status)
  */
 export class Pipeline extends Construct {
   readonly stateMachine: sfn.StateMachine;
 
-  constructor(scope: Construct, id: string, props: PipelineProps) {
+  constructor(scope: Construct, id: string, props: { data: Data; functions: Functions }) {
     super(scope, id);
     const { data, functions } = props;
 
+    // Catch target: mark the job FAILED, keeping the clearer message the stage may have written, then fail.
     const markFailed = new tasks.DynamoUpdateItem(this, 'MarkJobFailed', {
       table: data.table,
       key: {
         jobId: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.jobId')),
         sk: tasks.DynamoAttributeValue.fromString('META'),
       },
-      updateExpression:
-        'SET #st = :failed, errorCode = if_not_exists(errorCode, :code), ' +
-        'errorMessage = if_not_exists(errorMessage, :msg), updatedAt = :now',
+      updateExpression: 'SET #st = :failed, errorCode = if_not_exists(errorCode, :code), errorMessage = if_not_exists(errorMessage, :msg)',
       expressionAttributeNames: { '#st': 'status' },
       expressionAttributeValues: {
         ':failed': tasks.DynamoAttributeValue.fromString('FAILED'),
         ':code': tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$.error.Error')),
         ':msg': tasks.DynamoAttributeValue.fromString('The pipeline could not complete. Please try again.'),
-        ':now': tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$$.State.EnteredTime')),
       },
       resultPath: sfn.JsonPath.DISCARD,
-    }).next(
-      new sfn.Fail(this, 'PipelineFailed', {
-        error: 'PipelineFailed',
-        cause: 'A stage failed; see the job record and audit log.',
-      }),
-    );
+    }).next(new sfn.Fail(this, 'PipelineFailed'));
 
-    const stage = (id: string, fn: Functions['analyzer'], resultPath: string, timeout: number) => {
-      const task = new tasks.LambdaInvoke(this, id, {
-        lambdaFunction: fn,
-        payloadResponseOnly: true,
-        resultPath,
-        taskTimeout: sfn.Timeout.duration(Duration.seconds(timeout)),
-      });
+    const stage = (name: string, fn: lambda.IFunction, resultPath: string) => {
+      const task = new tasks.LambdaInvoke(this, name, { lambdaFunction: fn, payloadResponseOnly: true, resultPath });
+      // Retry: temporary problems (Bedrock busy, agent hit its turn limit, Lambda hiccups), with backoff + jitter.
       task.addRetry({
-        errors: ['ThrottledError', 'ModelOutputError'],
+        errors: ['ThrottledError', 'ModelOutputError', 'Lambda.ServiceException', 'Lambda.TooManyRequestsException'],
         interval: Duration.seconds(5),
         maxAttempts: 3,
         backoffRate: 2,
         jitterStrategy: sfn.JitterType.FULL,
       });
-      task.addRetry({
-        errors: [
-          'Lambda.ServiceException',
-          'Lambda.AWSLambdaException',
-          'Lambda.SdkClientException',
-          'Lambda.TooManyRequestsException',
-        ],
-        interval: Duration.seconds(2),
-        maxAttempts: 3,
-        backoffRate: 2,
-        jitterStrategy: sfn.JitterType.FULL,
-      });
+      // Catch: anything else (e.g. InputError for a missing document) goes straight to MarkJobFailed.
       task.addCatch(markFailed, { errors: ['States.ALL'], resultPath: '$.error' });
       return task;
     };
 
-    const definition = stage('Analyze', functions.analyzer, '$.analysis', 130)
-      .next(stage('Score', functions.scorer, '$.match', 130))
-      .next(stage('Rewrite', functions.rewriter, '$.rewrite', 310));
+    const definition = stage('Analyze', functions.analyzer, '$.analysis')
+      .next(stage('Score', functions.scorer, '$.match'))
+      .next(stage('Rewrite', functions.rewriter, '$.rewrite'));
 
     this.stateMachine = new sfn.StateMachine(this, 'StateMachine', {
       stateMachineName: `${NAME_PREFIX}Pipeline`,
       definitionBody: sfn.DefinitionBody.fromChainable(definition),
       timeout: Duration.minutes(15),
-      tracingEnabled: true,
       logs: {
-        // ERROR only and no execution data: state carries resume evidence quotes (personal data).
         destination: new logs.LogGroup(this, 'StateMachineLogs', {
           logGroupName: `/aws/vendedlogs/states/${NAME_PREFIX}Pipeline`,
           retention: logs.RetentionDays.ONE_MONTH,
           removalPolicy: RemovalPolicy.DESTROY,
         }),
         level: sfn.LogLevel.ERROR,
-        includeExecutionData: false,
+        includeExecutionData: false, // the state contains resume text: keep it out of the logs
       },
     });
 
-    // Submit needs the ARN; wire it here to avoid a Functions <-> Pipeline cycle.
+    // The submit Lambda starts executions.
     this.stateMachine.grantStartExecution(functions.submit);
     functions.submit.addEnvironment('STATE_MACHINE_ARN', this.stateMachine.stateMachineArn);
   }

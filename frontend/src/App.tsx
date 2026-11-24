@@ -1,33 +1,41 @@
-import { AuthProvider } from './auth/AuthProvider'
-import { useAuth } from './auth/context'
-import { AppFooter } from './components/layout/AppFooter'
-import { AppHeader } from './components/layout/AppHeader'
-import { Spinner } from './components/ui/Spinner'
-import { AuthPage } from './features/auth/AuthPage'
-import { TailorPage } from './features/tailor/TailorPage'
+import { useState } from 'react'
+import { currentEmail, getToken, signOut } from './auth'
+import AuthForm from './AuthForm'
+import JobView from './JobView'
+import TailorForm from './TailorForm'
 
-function Screen() {
-  const { status } = useAuth()
-  if (status === 'loading') {
-    return (
-      <div className="center-screen">
-        <Spinner label="Loading" />
-      </div>
-    )
-  }
-  return status === 'signedIn' ? <TailorPage /> : <AuthPage />
-}
-
+/** Screens: sign in -> form -> job progress/result. */
 export default function App() {
+  const [signedIn, setSignedIn] = useState(() => getToken() !== null)
+  const [jobId, setJobId] = useState<string | null>(null)
+
   return (
-    <AuthProvider>
-      <div className="app">
-        <AppHeader />
-        <main className="container main">
-          <Screen />
-        </main>
-        <AppFooter />
-      </div>
-    </AuthProvider>
+    <div className="app">
+      <header className="header">
+        <span className="logo">Resume Tailor</span>
+        {signedIn && (
+          <span className="account">
+            <span className="muted">{currentEmail()}</span>
+            <button className="btn btn-ghost" onClick={() => { signOut(); setSignedIn(false); setJobId(null) }}>
+              Sign out
+            </button>
+          </span>
+        )}
+      </header>
+
+      <main className="main">
+        {!signedIn ? (
+          <AuthForm onSignedIn={() => setSignedIn(true)} />
+        ) : jobId ? (
+          <JobView jobId={jobId} onReset={() => setJobId(null)} />
+        ) : (
+          <TailorForm email={currentEmail()} onSubmitted={setJobId} />
+        )}
+      </main>
+
+      <footer className="footer" role="note">
+        <span><strong>Demo.</strong> Resumes are personal data. Files are deleted after one day.</span>
+      </footer>
+    </div>
   )
 }

@@ -1,67 +1,54 @@
-"""POST /api/submit: validate inputs, store them, create the job, start the state machine."""
+"""POST /api/submit - validate the two documents, store them, start the Step Functions pipeline.
+
+Returns a job id straight away (HTTP 202): the three AI stages take longer than API Gateway's 29 s limit,
+so the page polls GET /api/jobs/{id} instead of waiting.
+"""
 
 import json
-import logging
+import os
 import uuid
 
 import boto3
 
-from common import config, jobs, storage
+from common import aws
 from common.errors import InputError
-from common.guardrails import validate_document, validate_email
-from common.http import Unauthorized, caller, parse_json_body, response
+from common.guardrails import validate_document
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+response = aws.response
 
-_sfn = None
-
-
-def _stepfunctions():
-    global _sfn
-    if _sfn is None:
-        _sfn = boto3.client("stepfunctions")
-    return _sfn
+stepfunctions = boto3.client("stepfunctions")
 
 
 def handler(event, _context=None):
-    try:
-        user_id, email = caller(event)
-    except Unauthorized as exc:
-        return response(401, {"error": str(exc)})
+    # Who is calling: API Gateway already validated the Cognito token, we only read its claims.
+    claims = event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims", {})
+    if not claims.get("sub") or claims.get("email_verified") != "true":
+        return response(401, {"error": "Please sign in with a verified email."})
+    user_id, email = claims["sub"], claims["email"]  # results go to the account's email, never one from the body
 
+    # Input guardrail: both documents present and within the length caps.
     try:
-        body = parse_json_body(event)
+        body = json.loads(event.get("body") or "{}")
         resume = validate_document("resume", body.get("resume"))
         job_text = validate_document("job description", body.get("jobDescription"))
-        validate_email(email)  # defence in depth: never trust the claim blindly
-    except ValueError as exc:
-        return response(400, {"error": str(exc)})
     except InputError as exc:
-        return response(400, {"error": exc.user_message})
+        return response(400, {"error": exc.message})
+    except (json.JSONDecodeError, AttributeError):
+        return response(400, {"error": "Send a JSON body with resume and jobDescription."})
 
-    try:
-        if not jobs.claim_daily_quota(user_id, config.max_jobs_per_user_per_day()):
-            return response(429, {"error": "Daily limit reached. Please try again tomorrow."})
-    except Exception:
-        logger.exception("quota check failed")
-        return response(500, {"error": "Could not start the job. Please try again."})
+    if not aws.claim_daily_quota(user_id):  # cost guard: 5 jobs per user per day
+        return response(429, {"error": "Daily limit reached. Please try again tomorrow."})
 
     job_id = str(uuid.uuid4())
-    try:
-        inputs = {"resume_key": storage.input_key(job_id, "resume"), "job_key": storage.input_key(job_id, "job")}
-        storage.put_text(inputs["resume_key"], resume)
-        storage.put_text(inputs["job_key"], job_text)
-        jobs.create_job(job_id, email, user_id)
-        # The state carries the S3 keys; each stage loads the documents with the read_inputs tool.
-        _stepfunctions().start_execution(
-            stateMachineArn=config.state_machine_arn(),
-            name=job_id,
-            input=json.dumps({"jobId": job_id, "inputs": inputs}),
-        )
-    except Exception:
-        logger.exception("submit failed for job=%s", job_id)
-        return response(500, {"error": "Could not start the job. Please try again."})
+    inputs = {"resume_key": aws.input_key(job_id, "resume"), "job_key": aws.input_key(job_id, "job")}
+    aws.put_text(inputs["resume_key"], resume)
+    aws.put_text(inputs["job_key"], job_text)
+    aws.create_job(job_id, user_id, email)
 
-    logger.info("job=%s started", job_id)  # never log the email address
+    # The state machine input is the pipeline's memory; each stage adds its output to it.
+    stepfunctions.start_execution(
+        stateMachineArn=os.environ["STATE_MACHINE_ARN"],
+        name=job_id,
+        input=json.dumps({"jobId": job_id, "inputs": inputs}),
+    )
     return response(202, {"jobId": job_id})

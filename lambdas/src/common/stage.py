@@ -1,40 +1,27 @@
-"""Shared wrapper for Step Functions stage handlers.
-
-Responsibilities: stage progress, audit logging, user-facing failure recording.
-"""
+"""Wrapper shared by the three Step Functions stages: progress, audit log, clear failures."""
 
 import functools
-import logging
-from collections.abc import Callable
-from typing import Any
 
-from common import jobs
+from common import aws
 from common.errors import GuardrailError, InputError
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 
-
-def stage_handler(stage: str) -> Callable:
-    """Decorate `fn(event) -> dict`. The returned dict is the stage output."""
-
-    def decorator(fn: Callable[[dict[str, Any]], dict[str, Any]]) -> Callable:
-        @functools.wraps(fn)
-        def wrapper(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
+def stage(name: str):
+    def decorate(run):
+        @functools.wraps(run)
+        def handler(event: dict, _context=None) -> dict:
             job_id = event["jobId"]
-            logger.info("stage=%s job=%s start", stage, job_id)
-            jobs.set_stage(job_id, stage)
+            print(f"stage={name} job={job_id} start")
+            aws.set_stage(job_id, name)  # the page shows which stage is running
             try:
-                output = fn(event)
+                output = run(event)
             except (InputError, GuardrailError) as exc:
-                # Non-retryable: record a clear message for the user before Step Functions catches it.
-                jobs.mark_failed(job_id, exc.code, exc.user_message)
-                logger.warning("stage=%s job=%s failed: %s", stage, job_id, exc.code)
+                aws.mark_failed(job_id, exc.code, exc.message)  # record a clear message, then let Catch fire
                 raise
-            jobs.write_audit(job_id, stage, output)
-            logger.info("stage=%s job=%s done", stage, job_id)
-            return output
+            aws.write_audit(job_id, name, output)  # audit log: every stage's output, by job id
+            print(f"stage={name} job={job_id} done")
+            return output  # Step Functions stores this in the state ($.analysis / $.match / $.rewrite)
 
-        return wrapper
+        return handler
 
-    return decorator
+    return decorate

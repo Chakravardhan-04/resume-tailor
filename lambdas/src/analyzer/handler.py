@@ -1,13 +1,11 @@
-"""Stage 1, requirement-analyzer: read_inputs -> extract_requirements."""
-
-from typing import Any
+"""Stage 1 - requirement analyzer: load the documents, extract the job's requirements."""
 
 from common import tools
-from common.stage import stage_handler
+from common.stage import stage
 
 
-@stage_handler("analyzer")
-def handler(event: dict[str, Any]) -> dict[str, Any]:
-    inputs = event.get("inputs") or {}
-    docs = tools.read_inputs(resume_key=inputs.get("resume_key"), job_key=inputs.get("job_key"))
-    return tools.extract_requirements(job_text=docs["job_text"])
+@stage("analyzer")
+def handler(event: dict) -> dict:
+    inputs = event.get("inputs", {})  # S3 keys put in the state by the submit Lambda
+    docs = tools.read_inputs(inputs.get("resume_key"), inputs.get("job_key"))
+    return tools.extract_requirements(docs["job_text"])  # -> state $.analysis

@@ -1,7 +1,8 @@
+import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import * as authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import { Stack } from 'aws-cdk-lib';
+
 import { NAME_PREFIX } from '../config';
 import { Auth } from './auth';
 import { Construct } from 'constructs';
@@ -42,7 +43,7 @@ export class Api extends Construct {
       authorizer,
     });
 
-    // Cost/abuse protection for an unauthenticated API: Bedrock calls are the expensive part.
+    // Throttling limits Bedrock cost: submit allows 1 request/second (burst 3).
     const stage = this.httpApi.defaultStage?.node.defaultChild as apigw.CfnStage;
     // Route-level settings must reference routes that already exist, so create the routes first.
     for (const route of [...submitRoutes, ...statusRoutes]) stage.node.addDependency(route);

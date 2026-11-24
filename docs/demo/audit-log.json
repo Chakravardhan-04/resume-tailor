@@ -1,73 +1,62 @@
 [
   {
-    "jobId": "f859bfa1-81eb-44e1-89fa-372b3e952629",
-    "sk": "AUDIT#2026-11-24T17:13:41.464+00:00#analyzer",
+    "jobId": "0113af1f-2580-4bd0-8842-42c81a3359c1",
+    "sk": "AUDIT#2026-11-24T18:03:10.103+00:00#analyzer",
     "stage": "analyzer",
-    "timestamp": "2026-11-24T17:13:41.464+00:00",
     "output": {
       "requirements": [
         {
           "id": "R1",
           "text": "3+ years of professional experience in backend development",
-          "category": "must_have",
-          "type": "experience"
+          "category": "must_have"
         },
         {
           "id": "R2",
           "text": "Strong Python skills",
-          "category": "must_have",
-          "type": "skill"
+          "category": "must_have"
         },
         {
           "id": "R3",
           "text": "Hands-on experience with AWS serverless services (Lambda, API Gateway, DynamoDB)",
-          "category": "must_have",
-          "type": "skill"
+          "category": "must_have"
         },
         {
           "id": "R4",
           "text": "Experience designing REST APIs",
-          "category": "must_have",
-          "type": "skill"
+          "category": "must_have"
         },
         {
           "id": "R5",
           "text": "Infrastructure as code with Terraform or AWS CDK",
-          "category": "must_have",
-          "type": "skill"
+          "category": "must_have"
         },
         {
           "id": "R6",
           "text": "Experience with automated testing and CI/CD pipelines",
-          "category": "must_have",
-          "type": "skill"
+          "category": "must_have"
         },
         {
           "id": "R7",
-          "text": "Experience with Kubernetes and Docker",
-          "category": "nice_to_have",
-          "type": "skill"
+          "text": "Kubernetes and Docker",
+          "category": "nice_to_have"
         },
         {
           "id": "R8",
           "text": "Experience with event-driven architectures (SQS, EventBridge)",
-          "category": "nice_to_have",
-          "type": "skill"
+          "category": "nice_to_have"
         },
         {
           "id": "R9",
           "text": "AWS Certified Developer or Solutions Architect certification",
-          "category": "nice_to_have",
-          "type": "certification"
+          "category": "nice_to_have"
         }
       ]
     }
   },
   {
-    "jobId": "f859bfa1-81eb-44e1-89fa-372b3e952629",
-    "sk": "AUDIT#2026-11-24T17:13:47.370+00:00#scorer",
+    "jobId": "0113af1f-2580-4bd0-8842-42c81a3359c1",
+    "sk": "AUDIT#2026-11-24T18:03:12.838+00:00#scorer",
     "stage": "scorer",
-    "timestamp": "2026-11-24T17:13:47.370+00:00",
     "output": {
       "score": 67,
       "matched": [
@@ -81,13 +70,13 @@
           "id": "R2",
           "requirement": "Strong Python skills",
           "category": "must_have",
-          "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day."
+          "evidence": "Built REST APIs in Python and Flask for the order management system"
         },
         {
           "id": "R3",
           "requirement": "Hands-on experience with AWS serverless services (Lambda, API Gateway, DynamoDB)",
           "category": "must_have",
-          "evidence": "Designed DynamoDB tables and access patterns for the product catalogue service....Deployed serverless services with AWS Lambda and API Gateway using AWS SAM."
+          "evidence": "Designed DynamoDB tables and access patterns for the product catalogue service.... Deployed serverless services with AWS Lambda and API Gateway using AWS SAM."
         },
         {
           "id": "R4",
@@ -107,11 +96,11 @@
           "id": "R5",
           "requirement": "Infrastructure as code with Terraform or AWS CDK",
           "category": "must_have",
-          "reason": "No mention of Terraform or AWS CDK; AWS SAM is cited but is not Terraform or CDK."
+          "reason": "The resume mentions AWS SAM for deployment but does not reference Terraform or AWS CDK."
         },
         {
           "id": "R7",
-          "requirement": "Experience with Kubernetes and Docker",
+          "requirement": "Kubernetes and Docker",
           "category": "nice_to_have",
           "reason": "No mention of Kubernetes or Docker anywhere in the resume."
         },
@@ -119,7 +108,7 @@
           "id": "R8",
           "requirement": "Experience with event-driven architectures (SQS, EventBridge)",
           "category": "nice_to_have",
-          "reason": "No mention of SQS, EventBridge, or any event-driven architecture experience."
+          "reason": "No mention of SQS, EventBridge, or any event-driven architecture experience in the resume."
         },
         {
           "id": "R9",
@@ -131,37 +120,37 @@
     }
   },
   {
-    "jobId": "f859bfa1-81eb-44e1-89fa-372b3e952629",
-    "sk": "AUDIT#2026-11-24T17:13:54.122+00:00#rewriter",
+    "jobId": "0113af1f-2580-4bd0-8842-42c81a3359c1",
+    "sk": "AUDIT#2026-11-24T18:03:20.093+00:00#rewriter",
     "stage": "rewriter",
-    "timestamp": "2026-11-24T17:13:54.122+00:00",
     "output": {
-      "resultKey": "results/f859bfa1-81eb-44e1-89fa-372b3e952629.pdf",
+      "resultKey": "results/0113af1f-2580-4bd0-8842-42c81a3359c1.pdf",
+      "emailStatus": "SENT",
       "result": {
         "score": 67,
-        "summary": "Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS. Hands-on with AWS serverless services including Lambda, API Gateway, and DynamoDB, with experience designing data models and access patterns. Writes automated tests with pytest and has set up CI pipelines using GitHub Actions.",
+        "summary": "Backend-focused software engineer with 3 years of experience building Python services and REST APIs on AWS. Hands-on with AWS serverless services including Lambda, API Gateway, and DynamoDB, alongside automated testing and CI/CD pipelines.",
         "bullets": [
           "Built REST APIs in Python and Flask for an order management system, serving 40,000 requests per day.",
           "Deployed serverless services using AWS Lambda and API Gateway with AWS SAM.",
           "Designed DynamoDB tables and access patterns for a product catalogue service.",
           "Reduced average API latency by 30% through caching and query optimisation.",
-          "Wrote unit tests with pytest and set up GitHub Actions CI pipelines across 4 repositories."
+          "Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories."
         ],
         "gaps": [
           {
             "requirement": "Infrastructure as code with Terraform or AWS CDK",
             "category": "must_have",
-            "reason": "No mention of Terraform or AWS CDK; AWS SAM is cited but is not Terraform or CDK."
+            "reason": "The resume mentions AWS SAM for deployment but does not reference Terraform or AWS CDK."
           },
           {
-            "requirement": "Experience with Kubernetes and Docker",
+            "requirement": "Kubernetes and Docker",
             "category": "nice_to_have",
             "reason": "No mention of Kubernetes or Docker anywhere in the resume."
           },
           {
             "requirement": "Experience with event-driven architectures (SQS, EventBridge)",
             "category": "nice_to_have",
-            "reason": "No mention of SQS, EventBridge, or any event-driven architecture experience."
+            "reason": "No mention of SQS, EventBridge, or any event-driven architecture experience in the resume."
           },
           {
             "requirement": "AWS Certified Developer or Solutions Architect certification",
@@ -176,11 +165,11 @@
           },
           {
             "requirement": "Strong Python skills",
-            "evidence": "Built REST APIs in Python and Flask for the order management system, serving 40,000 requests per day."
+            "evidence": "Built REST APIs in Python and Flask for the order management system"
           },
           {
             "requirement": "Hands-on experience with AWS serverless services (Lambda, API Gateway, DynamoDB)",
-            "evidence": "Designed DynamoDB tables and access patterns for the product catalogue service....Deployed serverless services with AWS Lambda and API Gateway using AWS SAM."
+            "evidence": "Designed DynamoDB tables and access patterns for the product catalogue service.... Deployed serverless services with AWS Lambda and API Gateway using AWS SAM."
           },
           {
             "requirement": "Experience designing REST APIs",
@@ -191,8 +180,7 @@
             "evidence": "Wrote unit tests with pytest and set up GitHub Actions CI for 4 repositories."
           }
         ]
-      },
-      "emailStatus": "SENT"
+      }
     }
   }
 ]

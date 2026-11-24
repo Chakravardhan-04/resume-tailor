@@ -1,108 +1,57 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import * as api from './api'
 import App from './App'
-import * as cognito from './auth/cognito'
+import JobView from './JobView'
 
-beforeEach(() => {
+// A token that is valid for one hour, for user me@example.com.
+const payload = btoa(JSON.stringify({ email: 'me@example.com', exp: Date.now() / 1000 + 3600 }))
+const signIn = () => sessionStorage.setItem('resume-tailor.idToken', `h.${payload}.s`)
+
+afterEach(() => {
   sessionStorage.clear()
-  cognito.configureAuth({ region: 'us-east-1', userPoolId: 'p', clientId: 'c' })
+  vi.restoreAllMocks()
 })
-afterEach(() => vi.restoreAllMocks())
 
-const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
-const jwt = (payload: object) => `h.${btoa(JSON.stringify(payload))}.s`
+const done: api.Job = {
+  status: 'DONE',
+  stage: 'done',
+  downloadUrl: 'https://example.com/file.pdf',
+  email: { status: 'SENT', message: '' },
+  result: {
+    score: 67,
+    summary: 'Python engineer.',
+    bullets: ['Built APIs in Python.'],
+    gaps: [{ requirement: 'Kubernetes', category: 'nice_to_have', reason: 'Not in resume.' }],
+    matched: [{ requirement: 'Python', evidence: 'Built REST APIs in Python' }],
+  },
+}
 
-describe('App auth gate', () => {
-  it('shows the demo warning and the sign-in form when signed out, and no resume form', async () => {
+describe('App', () => {
+  it('shows the sign-in form when signed out', () => {
     render(<App />)
-    expect(await screen.findByRole('form', { name: 'Sign in' })).toBeInTheDocument()
-    expect(screen.getByRole('note')).toHaveTextContent(/demo/i)
-    expect(screen.queryByLabelText('Resume')).not.toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Sign in' })).toBeInTheDocument()
   })
 
-  it('shows the app and the account email when a session exists', async () => {
-    sessionStorage.setItem(
-      'resume-tailor.session',
-      JSON.stringify({
-        idToken: jwt({ email: 'me@example.com' }),
-        refreshToken: 'r',
-        expiresAt: Date.now() + 3600_000,
-      }),
-    )
+  it('submits, polls and shows the draft, gap list, PDF link and email status', async () => {
+    signIn()
+    vi.spyOn(api, 'submitJob').mockResolvedValue({ jobId: 'j1' })
+    vi.spyOn(api, 'getJob').mockResolvedValue(done)
     render(<App />)
-    expect(await screen.findByLabelText('Resume')).toBeInTheDocument()
-    expect(screen.getByRole('banner')).toHaveTextContent('me@example.com')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try a sample' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tailor my resume' }))
+
+    expect(await screen.findByText('Python engineer.')).toBeInTheDocument()
+    expect(screen.getByText('Kubernetes')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute('href', done.downloadUrl)
+    expect(screen.getByText(/we emailed this draft/i)).toBeInTheDocument()
   })
 
-  it('signs in with email and password', async () => {
-    const user = userEvent.setup()
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      reply(200, {
-        AuthenticationResult: { IdToken: jwt({ email: 'me@example.com' }), RefreshToken: 'r', ExpiresIn: 3600 },
-      }),
-    )
-    render(<App />)
-    await user.type(await screen.findByLabelText('Email'), 'me@example.com')
-    await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
-    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
-    expect(await screen.findByLabelText('Resume')).toBeInTheDocument()
-  })
-
-  it('shows a clear error for wrong credentials', async () => {
-    const user = userEvent.setup()
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(400, { __type: 'NotAuthorizedException' }))
-    render(<App />)
-    await user.type(await screen.findByLabelText('Email'), 'me@example.com')
-    await user.type(screen.getByLabelText('Password'), 'wrongpassword1')
-    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email or password.')
-  })
-
-  it('walks through sign-up, code confirmation, then back to sign-in', async () => {
-    const user = userEvent.setup()
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, {}))
-    render(<App />)
-    await user.click(await screen.findByRole('button', { name: 'Create an account' }))
-    await user.type(screen.getByLabelText('Email'), 'new@example.com')
-    await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
-    await user.click(screen.getByRole('button', { name: 'Create account' }))
-
-    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument()
-    await user.type(screen.getByLabelText('Verification code'), '123456')
-    await user.click(screen.getByRole('button', { name: 'Confirm email' }))
-
-    await waitFor(() => expect(screen.getByRole('form', { name: 'Sign in' })).toBeInTheDocument())
-    expect(screen.getByText(/email confirmed/i)).toBeInTheDocument()
-    const targets = fetchSpy.mock.calls.map((c) => ((c[1] as RequestInit).headers as Record<string, string>)['X-Amz-Target'])
-    expect(targets).toEqual([
-      'AWSCognitoIdentityProviderService.SignUp',
-      'AWSCognitoIdentityProviderService.ConfirmSignUp',
-    ])
-  })
-
-  it('sends an unconfirmed user to the code screen with a fresh code', async () => {
-    const user = userEvent.setup()
-    vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(reply(400, { __type: 'UserNotConfirmedException' }))
-      .mockResolvedValue(reply(200, {}))
-    render(<App />)
-    await user.type(await screen.findByLabelText('Email'), 'me@example.com')
-    await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
-    await user.click(screen.getByRole('button', { name: /^sign in$/i }))
-    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument()
-  })
-
-  it('signs out', async () => {
-    const user = userEvent.setup()
-    sessionStorage.setItem(
-      'resume-tailor.session',
-      JSON.stringify({ idToken: jwt({ email: 'me@example.com' }), refreshToken: 'r', expiresAt: Date.now() + 3600_000 }),
-    )
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, {}))
-    render(<App />)
-    await user.click(await screen.findByRole('button', { name: 'Sign out' }))
-    expect(await screen.findByRole('form', { name: 'Sign in' })).toBeInTheDocument()
-    expect(sessionStorage.getItem('resume-tailor.session')).toBeNull()
+  it('shows the clear message from a failed pipeline', async () => {
+    vi.spyOn(api, 'getJob').mockResolvedValue({ status: 'FAILED', stage: 'analyzer', error: 'The job description is missing for this job.' })
+    render(<JobView jobId="j1" onReset={() => {}} />)
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('The job description is missing'))
   })
 })

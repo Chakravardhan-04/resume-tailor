@@ -1,13 +1,12 @@
-"""Stage 2, match-scorer: read_inputs -> score_match (uses $.analysis from the state)."""
-
-from typing import Any
+"""Stage 2 - match scorer: compare the resume with each requirement, list the gaps."""
 
 from common import tools
-from common.stage import stage_handler
+from common.stage import stage
 
 
-@stage_handler("scorer")
-def handler(event: dict[str, Any]) -> dict[str, Any]:
-    inputs = event.get("inputs") or {}
-    docs = tools.read_inputs(resume_key=inputs.get("resume_key"), job_key=inputs.get("job_key"))
-    return tools.score_match(resume_text=docs["resume_text"], requirements=event["analysis"]["requirements"])
+@stage("scorer")
+def handler(event: dict) -> dict:
+    inputs = event.get("inputs", {})
+    docs = tools.read_inputs(inputs.get("resume_key"), inputs.get("job_key"))
+    requirements = event["analysis"]["requirements"]  # stage 1's output, carried in the state
+    return tools.score_match(docs["resume_text"], requirements)  # -> state $.match

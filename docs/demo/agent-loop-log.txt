@@ -1,13 +1,15 @@
-# CloudWatch log lines for job f859bfa1-81eb-44e1-89fa-372b3e952629, in pipeline order (agent loops and rewriter guardrail)
-2026-11-24T17:13:38.772Z  INFO     stage=analyzer job=f859bfa1-81eb-44e1-89fa-372b3e952629 start
-2026-11-24T17:13:41.464Z  INFO     agent=analyzer stop=answer_accepted turns=1
-2026-11-24T17:13:41.471Z  INFO     stage=analyzer job=f859bfa1-81eb-44e1-89fa-372b3e952629 done
-2026-11-24T17:13:42.114Z  INFO     stage=scorer job=f859bfa1-81eb-44e1-89fa-372b3e952629 start
-2026-11-24T17:13:45.387Z  WARNING  agent=scorer turn=1/3 rejected: evidence for ['R3'] is not copied verbatim from the resume. Copy one exact sentence or phrase from the resume (join separate excerpts with '...'), or move the requirement to gaps.
-2026-11-24T17:13:47.369Z  INFO     agent=scorer stop=answer_accepted turns=2
-2026-11-24T17:13:47.377Z  INFO     stage=scorer job=f859bfa1-81eb-44e1-89fa-372b3e952629 done
-2026-11-24T17:13:48.654Z  INFO     stage=rewriter job=f859bfa1-81eb-44e1-89fa-372b3e952629 start
-2026-11-24T17:13:52.026Z  INFO     agent=rewriter stop=answer_accepted turns=1
-2026-11-24T17:13:53.841Z  INFO     agent=verifier stop=answer_accepted turns=1
-2026-11-24T17:13:53.842Z  INFO     rewrite attempt=1 kept=5 dropped=1 summary_ok=True
-2026-11-24T17:13:54.130Z  INFO     stage=rewriter job=f859bfa1-81eb-44e1-89fa-372b3e952629 done
+# CloudWatch logs for job 0113af1f-2580-4bd0-8842-42c81a3359c1, in pipeline order
+stage=analyzer job=0113af1f-2580-4bd0-8842-42c81a3359c1 start
+agent=analyzer stop=answer_accepted turns=1
+stage=analyzer job=0113af1f-2580-4bd0-8842-42c81a3359c1 done
+stage=scorer job=0113af1f-2580-4bd0-8842-42c81a3359c1 start
+agent=scorer stop=answer_accepted turns=1
+stage=scorer job=0113af1f-2580-4bd0-8842-42c81a3359c1 done
+stage=rewriter job=0113af1f-2580-4bd0-8842-42c81a3359c1 start
+agent=rewriter stop=answer_accepted turns=1
+agent=verifier stop=answer_accepted turns=1
+rewrite attempt=1 kept=5 dropped=0 summary_ok=False
+agent=rewriter stop=answer_accepted turns=1
+agent=verifier stop=answer_accepted turns=1
+rewrite attempt=2 kept=5 dropped=0 summary_ok=True
+stage=rewriter job=0113af1f-2580-4bd0-8842-42c81a3359c1 done

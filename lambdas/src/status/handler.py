@@ -1,40 +1,23 @@
-"""GET /api/jobs/{jobId}: job status, result, and a fresh presigned PDF link when done."""
+"""GET /api/jobs/{jobId} - the page polls this every 3 seconds until the job is DONE or FAILED."""
 
-import logging
-import re
+from common import aws
 
-from common import jobs, storage
-from common.http import Unauthorized, caller, response
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+response = aws.response
 
 
 def handler(event, _context=None):
-    try:
-        user_id, _email = caller(event)
-    except Unauthorized as exc:
-        return response(401, {"error": str(exc)})
-
+    claims = event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims", {})
     job_id = (event.get("pathParameters") or {}).get("jobId", "")
-    if not _UUID.match(job_id):
-        return response(400, {"error": "Invalid job id."})
+    job = aws.get_job(job_id) if job_id else None
 
-    try:
-        job = jobs.get_job(job_id)
-    except Exception:
-        logger.exception("status lookup failed for job=%s", job_id)
-        return response(500, {"error": "Could not read job status."})
-    if job is None or job.get("userId") != user_id:  # same 404 for "not yours" and "not found"
-        return response(404, {"error": "Job not found (it may have expired)."})
+    if not job or job.get("userId") != claims.get("sub"):  # users can only see their own jobs
+        return response(404, {"error": "Job not found."})
 
     body = {"jobId": job_id, "status": job["status"], "stage": job.get("stage")}
     if job["status"] == "DONE":
-        body["result"] = jobs.to_plain(job.get("result"))
-        body["downloadUrl"] = storage.presign_pdf(job["resultKey"])  # generated per poll; never stored
-        body["email"] = {"status": job.get("emailStatus", "SKIPPED"), "message": job.get("emailMessage") or None}
-    elif job["status"] == "FAILED":
-        body["error"] = {"code": job.get("errorCode"), "message": job.get("errorMessage")}
+        body["result"] = aws.plain(job["result"])
+        body["downloadUrl"] = aws.pdf_link(job["resultKey"])  # fresh 15-minute link on every poll
+        body["email"] = {"status": job.get("emailStatus"), "message": job.get("emailMessage")}
+    if job["status"] == "FAILED":
+        body["error"] = job.get("errorMessage")  # e.g. "The job description is missing for this job..."
     return response(200, body)

@@ -1,32 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
-import { AssetHashType, DockerImage, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { AssetHashType, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
-import {
-  DOWNLOAD_URL_TTL_SECONDS,
-  MAX_AGENT_ITERATIONS,
-  MAX_DOC_CHARS,
-  MAX_JOBS_PER_USER_PER_DAY,
-  MIN_DOC_CHARS,
-  MODEL_ID,
-  NAME_PREFIX,
-  RESULTS_PREFIX,
-  UPLOADS_PREFIX,
-} from '../config';
+import { MODEL_ID, NAME_PREFIX } from '../config';
 import { Data } from './data';
 
-const LAMBDAS_DIR = path.join(__dirname, '..', '..', '..', 'lambdas');
+const LAMBDAS = path.join(__dirname, '..', '..', '..', 'lambdas');
 
-export interface FunctionsProps {
-  data: Data;
-  /** SES-verified address the results are sent from. */
-  senderEmail: string;
-}
-
-/** The three specialists plus the submit and status Lambdas, each with least-privilege IAM. */
+/** The five Lambdas: submit + status (API) and the three pipeline specialists. Each gets its own IAM role. */
 export class Functions extends Construct {
   readonly submit: lambda.Function;
   readonly status: lambda.Function;
@@ -34,159 +18,86 @@ export class Functions extends Construct {
   readonly scorer: lambda.Function;
   readonly rewriter: lambda.Function;
 
-  private readonly code: lambda.Code;
-  private readonly layer: lambda.LayerVersion;
-  private readonly baseEnv: Record<string, string>;
-
-  constructor(scope: Construct, id: string, props: FunctionsProps) {
+  constructor(scope: Construct, id: string, props: { data: Data; senderEmail: string }) {
     super(scope, id);
-    
-
-    this.code = lambda.Code.fromAsset(path.join(LAMBDAS_DIR, 'src'), {
-      exclude: ['**/__pycache__', '**/*.pyc'],
-    });
-    this.layer = new lambda.LayerVersion(this, 'DepsLayer', {
-      layerVersionName: `${NAME_PREFIX}DepsLayer`,
-      description: 'reportlab (PDF generation)',
-      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
-      code: this.buildLayerCode(),
-    });
-    this.baseEnv = {
-      DATA_BUCKET: props.data.bucket.bucketName,
-      JOBS_TABLE: props.data.table.tableName,
-      MODEL_ID,
-  NAME_PREFIX,
-      MAX_DOC_CHARS: String(MAX_DOC_CHARS),
-      MIN_DOC_CHARS: String(MIN_DOC_CHARS),
-      MAX_AGENT_ITERATIONS: String(MAX_AGENT_ITERATIONS),
-      MAX_JOBS_PER_USER_PER_DAY: String(MAX_JOBS_PER_USER_PER_DAY),
-      DOWNLOAD_URL_TTL_SECONDS: String(DOWNLOAD_URL_TTL_SECONDS),
-    };
-
-    this.status = this.fn('Status', 'status', { timeout: 10, memory: 256 });
-    this.submit = this.fn('Submit', 'submit', { timeout: 30, memory: 256 });
-    this.analyzer = this.fn('Analyzer', 'analyzer', { timeout: 120, memory: 512 });
-    this.scorer = this.fn('Scorer', 'scorer', { timeout: 120, memory: 512 });
-    this.rewriter = this.fn('Rewriter', 'rewriter', { timeout: 300, memory: 1024, layer: true });
-    this.rewriter.addEnvironment('SENDER_EMAIL', props.senderEmail);
-
     const { bucket, table } = props.data;
-    const uploads = `${UPLOADS_PREFIX}*`;
-    const results = `${RESULTS_PREFIX}*`;
+    const code = lambda.Code.fromAsset(path.join(LAMBDAS, 'src'), { exclude: ['**/__pycache__'] });
+    const env = { DATA_BUCKET: bucket.bucketName, JOBS_TABLE: table.tableName, MODEL_ID };
 
-    bucket.grantPut(this.submit, uploads);
-    table.grant(this.submit, 'dynamodb:PutItem', 'dynamodb:UpdateItem'); // job record + daily quota counter
-
-    bucket.grantRead(this.status, results); // needed so presigned URLs are valid
-    table.grant(this.status, 'dynamodb:GetItem');
-
-    for (const stage of [this.analyzer, this.scorer, this.rewriter]) {
-      bucket.grantRead(stage, uploads);
-      table.grant(stage, 'dynamodb:UpdateItem', 'dynamodb:PutItem'); // status + audit log
-      this.allowBedrock(stage);
-    }
-    bucket.grantPut(this.rewriter, results);
-    table.grant(this.rewriter, 'dynamodb:GetItem'); // reads the recipient address
-    this.allowSes(this.rewriter, props.senderEmail);
-  }
-
-  private fn(
-    id: string,
-    dir: string,
-    opts: { timeout: number; memory: number; layer?: boolean },
-  ): lambda.Function {
-    const functionName = `${NAME_PREFIX}${id}`;
-    return new lambda.Function(this, id, {
-      functionName,
-      runtime: lambda.Runtime.PYTHON_3_12,
-      architecture: lambda.Architecture.X86_64,
-      code: this.code,
-      handler: `${dir}.handler.handler`,
-      timeout: Duration.seconds(opts.timeout),
-      memorySize: opts.memory,
-      environment: this.baseEnv,
-      layers: opts.layer ? [this.layer] : undefined,
-      tracing: lambda.Tracing.ACTIVE,
-      logGroup: new logs.LogGroup(this, `${id}Logs`, {
-        logGroupName: `/aws/lambda/${functionName}`,
-        retention: logs.RetentionDays.ONE_MONTH,
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-    });
-  }
-
-  /** SES send, restricted to the one verified sender address. */
-  private allowSes(fn: lambda.Function, senderEmail: string): void {
-    const stack = Stack.of(this);
-    fn.addToRolePolicy(
-      new iam.PolicyStatement({
-        // SESv2 SendEmail with Raw content (needed for the PDF attachment) is authorized as ses:SendRawEmail.
-        actions: ['ses:SendEmail', 'ses:SendRawEmail'],
-        resources: [`arn:${stack.partition}:ses:${stack.region}:${stack.account}:identity/*`],
-        conditions: { StringEquals: { 'ses:FromAddress': senderEmail } },
-      }),
-    );
-  }
-
-  private allowBedrock(fn: lambda.Function): void {
-    const stack = Stack.of(this);
-    fn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['bedrock:InvokeModel'],
-        resources: [
-          // The "us." cross-region inference profile in this account...
-          `arn:${stack.partition}:bedrock:${stack.region}:${stack.account}:inference-profile/${MODEL_ID}`,
-          // ...and the underlying foundation model, which the profile may route to in any US region.
-          `arn:${stack.partition}:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6*`,
-        ],
-      }),
-    );
-  }
-
-  /**
-   * Installs Linux/py3.12 wheels with the local pip (no Docker needed); falls back to a
-   * Docker build if local pip is unavailable.
-   */
-  private buildLayerCode(): lambda.Code {
-    const layerDir = path.join(LAMBDAS_DIR, 'layer');
-    const pipArgs = (target: string) => [
-      'install',
-      '-r',
-      'requirements.txt',
-      '-t',
-      target,
-      '--platform',
-      'manylinux2014_x86_64',
-      '--implementation',
-      'cp',
-      '--python-version',
-      '3.12',
-      '--only-binary=:all:',
-      '--no-compile',
-      '--quiet',
-    ];
-    return lambda.Code.fromAsset(layerDir, {
-      assetHashType: AssetHashType.SOURCE,
-      bundling: {
-        image: DockerImage.fromRegistry('public.ecr.aws/sam/build-python3.12'),
-        command: ['bash', '-c', `pip ${pipArgs('/asset-output/python').join(' ')}`],
-        local: {
-          tryBundle(outputDir: string): boolean {
-            for (const python of ['python3', 'python']) {
-              try {
-                execFileSync(python, ['-m', 'pip', ...pipArgs(path.join(outputDir, 'python'))], {
-                  cwd: layerDir,
-                  stdio: 'inherit',
-                });
-                return true;
-              } catch {
-                // try the next interpreter
-              }
-            }
-            return false;
+    // reportlab (PDF) as a Lambda layer, installed with local pip for Linux / Python 3.12.
+    const layer = new lambda.LayerVersion(this, 'DepsLayer', {
+      layerVersionName: `${NAME_PREFIX}DepsLayer`,
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+      code: lambda.Code.fromAsset(path.join(LAMBDAS, 'layer'), {
+        assetHashType: AssetHashType.SOURCE,
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+          local: {
+            tryBundle(outputDir: string) {
+              execFileSync('python3', ['-m', 'pip', 'install', '-r', 'requirements.txt', '-t', path.join(outputDir, 'python'),
+                '--platform', 'manylinux2014_x86_64', '--python-version', '3.12', '--only-binary=:all:', '--quiet'],
+                { cwd: path.join(LAMBDAS, 'layer'), stdio: 'inherit' });
+              return true;
+            },
           },
         },
-      },
+      }),
     });
+
+    const fn = (name: string, handler: string, timeoutSeconds: number) =>
+      new lambda.Function(this, name, {
+        functionName: `${NAME_PREFIX}${name}`,
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code,
+        handler: `${handler}.handler.handler`, // e.g. analyzer/handler.py -> handler()
+        timeout: Duration.seconds(timeoutSeconds),
+        memorySize: 512,
+        environment: env,
+        layers: [layer],
+        logGroup: new logs.LogGroup(this, `${name}Logs`, {
+          logGroupName: `/aws/lambda/${NAME_PREFIX}${name}`,
+          retention: logs.RetentionDays.ONE_MONTH,
+          removalPolicy: RemovalPolicy.DESTROY,
+        }),
+      });
+
+    this.submit = fn('Submit', 'submit', 30);
+    this.status = fn('Status', 'status', 10);
+    this.analyzer = fn('Analyzer', 'analyzer', 120);
+    this.scorer = fn('Scorer', 'scorer', 120);
+    this.rewriter = fn('Rewriter', 'rewriter', 300);
+    this.rewriter.addEnvironment('SENDER_EMAIL', props.senderEmail);
+
+    // Least privilege: each function gets only what it uses.
+    bucket.grantPut(this.submit, 'uploads/*');
+    table.grant(this.submit, 'dynamodb:PutItem', 'dynamodb:UpdateItem'); // job record + daily quota
+    bucket.grantRead(this.status, 'results/*'); // needed to sign the PDF download link
+    table.grant(this.status, 'dynamodb:GetItem');
+
+    const stack = Stack.of(this);
+    for (const stage of [this.analyzer, this.scorer, this.rewriter]) {
+      bucket.grantRead(stage, 'uploads/*'); // read_inputs
+      table.grant(stage, 'dynamodb:PutItem', 'dynamodb:UpdateItem'); // stage progress + audit log
+      // Bedrock through the IAM role (no API key). Only the three specialists may call the model.
+      stage.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['bedrock:InvokeModel'],
+          resources: [
+            `arn:aws:bedrock:${stack.region}:${stack.account}:inference-profile/${MODEL_ID}`,
+            'arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6*', // the profile routes to any US region
+          ],
+        }),
+      );
+    }
+
+    bucket.grantPut(this.rewriter, 'results/*'); // the PDF
+    table.grant(this.rewriter, 'dynamodb:GetItem'); // reads the recipient address
+    this.rewriter.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendEmail', 'ses:SendRawEmail'], // raw MIME is needed for the PDF attachment
+        resources: [`arn:aws:ses:${stack.region}:${stack.account}:identity/*`],
+        conditions: { StringEquals: { 'ses:FromAddress': props.senderEmail } }, // only from our sender
+      }),
+    );
   }
 }

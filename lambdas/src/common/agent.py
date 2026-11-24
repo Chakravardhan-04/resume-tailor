@@ -1,76 +1,67 @@
-"""Bounded agent loop on Bedrock tool use.
+"""The bounded agent loop that every specialist uses.
 
-The model must answer by calling one `answer` tool whose input schema describes the result.
-Code validates every call; a rejected call goes back to the model as an error tool result
-so it can correct itself. The loop stops on the first accepted answer, or raises
-ModelOutputError after `max_iterations` turns (Step Functions then retries or fails the job).
+1. Send the system prompt + documents to Claude, with ONE "answer tool" whose JSON schema
+   describes the result. toolChoice forces Claude to answer by calling that tool.
+2. Check the answer in code (the tool's validate function).
+3. Valid   -> stop and return it.
+   Invalid -> send the error back to Claude as a tool result and loop.
+4. After MAX_TURNS without a valid answer -> raise ModelOutputError (Step Functions retries the stage).
 """
 
 import json
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
-from common import config, llm
+from common import aws
 from common.errors import ModelOutputError
 
-logger = logging.getLogger(__name__)
+MAX_TURNS = 3  # max iterations per agent loop
 
 
-@dataclass(frozen=True)
+@dataclass
 class AnswerTool:
     name: str
     description: str
-    input_schema: dict[str, Any]
-    validate: Callable[[dict[str, Any]], dict[str, Any]]  # returns the cleaned result or raises ValueError
-
-    def spec(self) -> dict[str, Any]:
-        return {
-            "toolSpec": {"name": self.name, "description": self.description, "inputSchema": {"json": self.input_schema}}
-        }
+    schema: dict  # JSON schema Claude must follow
+    validate: Callable[[dict], dict]  # returns the cleaned answer, or raises ValueError("what is wrong")
 
 
-def run_agent(
-    agent: str,
-    system: str,
-    user: str,
-    answer: AnswerTool,
-    *,
-    max_iterations: int | None = None,
-    max_tokens: int = 2048,
-) -> dict[str, Any]:
-    limit = max_iterations or config.max_iterations()
-    tool_config = {"tools": [answer.spec()], "toolChoice": {"tool": {"name": answer.name}}}
-    messages: list[dict[str, Any]] = [{"role": "user", "content": [{"text": user}]}]
+def run_agent(agent: str, system: str, user: str, answer: AnswerTool, max_turns: int = MAX_TURNS) -> dict:
+    tool_config = {
+        "tools": [{"toolSpec": {"name": answer.name, "description": answer.description, "inputSchema": {"json": answer.schema}}}],
+        "toolChoice": {"tool": {"name": answer.name}},  # Claude must answer through this tool
+    }
+    messages = [{"role": "user", "content": [{"text": user}]}]
 
-    for turn in range(1, limit + 1):
-        message, stop_reason = llm.converse(system, messages, tool_config, max_tokens=max_tokens)
-        messages.append(message)
-        calls = [block["toolUse"] for block in message.get("content", []) if "toolUse" in block]
-        if not calls:
-            messages.append({"role": "user", "content": [{"text": f"Answer by calling the {answer.name} tool."}]})
+    for turn in range(1, max_turns + 1):  # bounded: never more than max_turns model calls
+        reply, stop_reason = aws.converse(system, messages, tool_config)
+        messages.append(reply)
+        call = next((block["toolUse"] for block in reply["content"] if "toolUse" in block), None)
+
+        try:
+            if call is None:
+                raise ValueError(f"answer by calling the {answer.name} tool")
+            if stop_reason == "max_tokens":
+                raise ValueError("your answer was cut off; give a shorter answer")
+            result = answer.validate(call["input"])  # code checks the model's answer
+        except ValueError as problem:
+            print(f"agent={agent} turn={turn}/{max_turns} rejected: {problem}")
+            feedback = (
+                {
+                    "toolResult": {
+                        "toolUseId": call["toolUseId"],
+                        "status": "error",
+                        "content": [{"text": json.dumps({"error": str(problem)})}],
+                    }
+                }
+                if call
+                else {"text": str(problem)}
+            )
+            messages.append({"role": "user", "content": [feedback]})  # tell Claude exactly what to fix
             continue
 
-        results = []
-        for call in calls:
-            try:
-                if call.get("name") != answer.name:
-                    raise ValueError(f"unknown tool {call.get('name')!r}; call {answer.name}")
-                if stop_reason == "max_tokens":
-                    raise ValueError("your answer was cut off; give a shorter answer")
-                result = answer.validate(call.get("input") or {})
-            except (ValueError, KeyError, TypeError) as exc:
-                logger.warning("agent=%s turn=%d/%d rejected: %s", agent, turn, limit, exc)
-                results.append(_tool_result(call["toolUseId"], {"error": str(exc)}, "error"))
-                continue
-            logger.info("agent=%s stop=answer_accepted turns=%d", agent, turn)
-            return result
-        messages.append({"role": "user", "content": results})
+        print(f"agent={agent} stop=answer_accepted turns={turn}")
+        return result  # stop condition: first valid answer
 
-    logger.warning("agent=%s stop=max_iterations turns=%d", agent, limit)
-    raise ModelOutputError("The AI returned an unusable answer. Please try again.")
-
-
-def _tool_result(tool_use_id: str, payload: dict[str, Any], status: str) -> dict[str, Any]:
-    return {"toolResult": {"toolUseId": tool_use_id, "content": [{"text": json.dumps(payload)}], "status": status}}
+    print(f"agent={agent} stop=max_turns")
+    raise ModelOutputError("The AI did not return a usable answer. Please try again.")

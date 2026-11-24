@@ -1,56 +1,42 @@
-import type { Job } from './types'
+/** The two API calls. CloudFront forwards /api/* to API Gateway, so these are same-origin requests. */
+import { getToken } from './auth'
 
-interface AuthHandlers {
-  getToken: () => Promise<string | null>
-  onUnauthorized: () => void
+export interface Gap {
+  requirement: string
+  category: 'must_have' | 'nice_to_have'
+  reason: string
 }
 
-let handlers: AuthHandlers = { getToken: async () => null, onUnauthorized: () => undefined }
-
-export function setAuthHandlers(h: AuthHandlers): void {
-  handlers = h
+export interface Result {
+  score: number
+  summary: string
+  bullets: string[]
+  gaps: Gap[]
+  matched: { requirement: string; evidence: string }[]
 }
 
-export class ApiError extends Error {
-  readonly status: number
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
+export interface Job {
+  status: 'RUNNING' | 'DONE' | 'FAILED'
+  stage: string
+  result?: Result
+  downloadUrl?: string
+  email?: { status: string; message: string }
+  error?: string
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await handlers.getToken()
-  const headers = new Headers(init?.headers)
-  if (token) headers.set('Authorization', `Bearer ${token}`)
-  let res: Response
-  try {
-    res = await fetch(path, { ...init, headers })
-  } catch {
-    throw new ApiError('Network error. Check your connection and try again.', 0)
-  }
-  const body = (await res.json().catch(() => ({}))) as { error?: string } & Record<string, unknown>
-  if (res.status === 401) {
-    handlers.onUnauthorized()
-    throw new ApiError('Your session has expired. Please sign in again.', 401)
-  }
-  if (!res.ok) {
-    throw new ApiError(body.error ?? `Request failed (${res.status}).`, res.status)
-  }
-  return body as T
-}
-
-export async function submitJob(resume: string, jobDescription: string): Promise<string> {
-  const { jobId } = await request<{ jobId: string }>('/api/submit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resume, jobDescription }),
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` }, // Cognito ID token
   })
-  return jobId
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body.error ?? body.message ?? `Request failed (${res.status})`)
+  return body
 }
 
-export function getJob(jobId: string, signal?: AbortSignal): Promise<Job> {
-  return request<Job>(`/api/jobs/${encodeURIComponent(jobId)}`, { signal })
-}
+/** POST /api/submit -> starts the Step Functions pipeline and returns the job id immediately. */
+export const submitJob = (resume: string, jobDescription: string) =>
+  request<{ jobId: string }>('/api/submit', { method: 'POST', body: JSON.stringify({ resume, jobDescription }) })
+
+/** GET /api/jobs/{id} -> status, current stage, and the result once DONE. */
+export const getJob = (jobId: string) => request<Job>(`/api/jobs/${jobId}`)

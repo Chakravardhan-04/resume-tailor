@@ -1,39 +1,33 @@
-"""Error types shared by all stages.
-
-Step Functions matches Retry/Catch rules on the exception class name, so these
-names are part of the contract with the state machine (see infra/).
-"""
+"""Error types. Step Functions matches Retry/Catch rules on these class names (see infra/lib/constructs/pipeline.ts)."""
 
 
 class PipelineError(Exception):
-    """Base class. `user_message` is safe to show to the end user."""
-
     code = "PipelineError"
 
-    def __init__(self, user_message: str):
-        super().__init__(user_message)
-        self.user_message = user_message
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message  # safe to show to the user
 
 
 class InputError(PipelineError):
-    """Missing or invalid user input. Not retryable."""
+    """Missing or invalid input (e.g. no job description). Not retried: the job fails with this message."""
 
     code = "InputError"
 
 
 class GuardrailError(PipelineError):
-    """A guardrail rejected the content (e.g. nothing honest left to say). Not retryable."""
+    """The honesty guardrail left nothing truthful to return. Not retried."""
 
     code = "GuardrailError"
 
 
 class ThrottledError(PipelineError):
-    """Transient model/service pressure. Retryable by Step Functions."""
+    """Bedrock is busy. Step Functions retries this with backoff."""
 
     code = "ThrottledError"
 
 
 class ModelOutputError(PipelineError):
-    """Model never produced valid output within the bounded loop. Retryable once."""
+    """The agent loop hit its turn limit without a valid answer. Step Functions retries this."""
 
     code = "ModelOutputError"
