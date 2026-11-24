@@ -28,7 +28,7 @@ export function ResultView({ result, downloadUrl, email, onReset }: Props) {
 
       {email?.status === 'SENT' && (
         <p className="notice" role="status">
-          We emailed this draft, with the PDF attached, to your address.
+          We emailed this draft, with the PDF attached, to the email address on your account.
         </p>
       )}
       {email?.status === 'FAILED' && (

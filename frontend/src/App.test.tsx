@@ -1,109 +1,108 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import * as api from './api'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import type { Job } from './types'
+import * as cognito from './auth/cognito'
 
-const LONG = 'x'.repeat(60)
-
+beforeEach(() => {
+  sessionStorage.clear()
+  cognito.configureAuth({ region: 'us-east-1', userPoolId: 'p', clientId: 'c' })
+})
 afterEach(() => vi.restoreAllMocks())
 
-const doneJob: Job = {
-  jobId: 'j1',
-  status: 'DONE',
-  stage: 'done',
-  downloadUrl: 'https://example.com/file.pdf',
-  email: { status: 'SENT', message: null },
-  result: {
-    score: 80,
-    summary: 'Python engineer.',
-    bullets: ['Built APIs in Python.'],
-    gaps: [{ requirement: 'Kubernetes', category: 'nice_to_have', reason: 'Not in resume.' }],
-    matched: [],
-  },
-}
+const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status })
+const jwt = (payload: object) => `h.${btoa(JSON.stringify(payload))}.s`
 
-async function fill(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText('Resume'), LONG)
-  await user.type(screen.getByLabelText('Job description'), LONG)
-  await user.type(screen.getByLabelText(/email/i), 'me@example.com')
-}
-
-describe('App', () => {
-  it('shows the demo-only warning', () => {
+describe('App auth gate', () => {
+  it('shows the demo warning and the sign-in form when signed out, and no resume form', async () => {
     render(<App />)
-    expect(screen.getByRole('note')).toHaveTextContent(/demo only/i)
+    expect(await screen.findByRole('form', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.getByRole('note')).toHaveTextContent(/demo/i)
+    expect(screen.queryByLabelText('Resume')).not.toBeInTheDocument()
   })
 
-  it('disables submit until both documents are long enough', async () => {
-    const user = userEvent.setup()
+  it('shows the app and the account email when a session exists', async () => {
+    sessionStorage.setItem(
+      'resume-tailor.session',
+      JSON.stringify({
+        idToken: jwt({ email: 'me@example.com' }),
+        refreshToken: 'r',
+        expiresAt: Date.now() + 3600_000,
+      }),
+    )
     render(<App />)
-    const button = screen.getByRole('button', { name: /tailor my resume/i })
-    expect(button).toBeDisabled()
-    await fill(user)
-    expect(button).toBeEnabled()
+    expect(await screen.findByLabelText('Resume')).toBeInTheDocument()
+    expect(screen.getByText('me@example.com')).toBeInTheDocument()
   })
 
-  it('keeps submit disabled for an invalid email', async () => {
+  it('signs in with email and password', async () => {
     const user = userEvent.setup()
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      reply(200, {
+        AuthenticationResult: { IdToken: jwt({ email: 'me@example.com' }), RefreshToken: 'r', ExpiresIn: 3600 },
+      }),
+    )
     render(<App />)
-    await user.type(screen.getByLabelText('Resume'), LONG)
-    await user.type(screen.getByLabelText('Job description'), LONG)
-    await user.type(screen.getByLabelText(/email/i), 'not-an-email')
-    expect(screen.getByRole('button', { name: /tailor my resume/i })).toBeDisabled()
+    await user.type(await screen.findByLabelText('Email'), 'me@example.com')
+    await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByLabelText('Resume')).toBeInTheDocument()
   })
 
-  it('submits, polls, and renders the result with a download link and gap list', async () => {
+  it('shows a clear error for wrong credentials', async () => {
     const user = userEvent.setup()
-    vi.spyOn(api, 'submitJob').mockResolvedValue('j1')
-    vi.spyOn(api, 'getJob').mockResolvedValue(doneJob)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(400, { __type: 'NotAuthorizedException' }))
     render(<App />)
-    await fill(user)
-    await user.click(screen.getByRole('button', { name: /tailor my resume/i }))
-
-    await waitFor(() => expect(screen.getByText('Python engineer.')).toBeInTheDocument())
-    expect(screen.getByText('Built APIs in Python.')).toBeInTheDocument()
-    expect(screen.getByText('Kubernetes')).toBeInTheDocument()
-    expect(screen.getByText(/we emailed this draft/i)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /download pdf/i })).toHaveAttribute('href', 'https://example.com/file.pdf')
+    await user.type(await screen.findByLabelText('Email'), 'me@example.com')
+    await user.type(screen.getByLabelText('Password'), 'wrongpassword1')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email or password.')
   })
 
-  it('explains a failed email while keeping the download link', async () => {
+  it('walks through sign-up, code confirmation, then back to sign-in', async () => {
     const user = userEvent.setup()
-    vi.spyOn(api, 'submitJob').mockResolvedValue('j1')
-    vi.spyOn(api, 'getJob').mockResolvedValue({
-      ...doneJob,
-      email: { status: 'FAILED', message: 'Recipient must be verified in SES sandbox.' },
-    })
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, {}))
     render(<App />)
-    await fill(user)
-    await user.click(screen.getByRole('button', { name: /tailor my resume/i }))
-    expect(await screen.findByText(/must be verified in SES sandbox/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /download pdf/i })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Create an account' }))
+    await user.type(screen.getByLabelText('Email'), 'new@example.com')
+    await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
+    await user.click(screen.getByRole('button', { name: 'Create your account' }))
+
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Verification code'), '123456')
+    await user.click(screen.getByRole('button', { name: 'Confirm your email' }))
+
+    await waitFor(() => expect(screen.getByRole('form', { name: 'Sign in' })).toBeInTheDocument())
+    expect(screen.getByText(/email confirmed/i)).toBeInTheDocument()
+    const targets = fetchSpy.mock.calls.map((c) => ((c[1] as RequestInit).headers as Record<string, string>)['X-Amz-Target'])
+    expect(targets).toEqual([
+      'AWSCognitoIdentityProviderService.SignUp',
+      'AWSCognitoIdentityProviderService.ConfirmSignUp',
+    ])
   })
 
-  it('shows the server message when submit is rejected', async () => {
+  it('sends an unconfirmed user to the code screen with a fresh code', async () => {
     const user = userEvent.setup()
-    vi.spyOn(api, 'submitJob').mockRejectedValue(new api.ApiError('The resume is too long.', 400))
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(reply(400, { __type: 'UserNotConfirmedException' }))
+      .mockResolvedValue(reply(200, {}))
     render(<App />)
-    await fill(user)
-    await user.click(screen.getByRole('button', { name: /tailor my resume/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('The resume is too long.')
+    await user.type(await screen.findByLabelText('Email'), 'me@example.com')
+    await user.type(screen.getByLabelText('Password'), 'Passw0rdPassw0rd')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument()
   })
 
-  it('shows a clear failure message from the pipeline', async () => {
+  it('signs out', async () => {
     const user = userEvent.setup()
-    vi.spyOn(api, 'submitJob').mockResolvedValue('j1')
-    vi.spyOn(api, 'getJob').mockResolvedValue({
-      jobId: 'j1',
-      status: 'FAILED',
-      stage: 'analyzer',
-      error: { code: 'InputError', message: 'The resume is missing.' },
-    })
+    sessionStorage.setItem(
+      'resume-tailor.session',
+      JSON.stringify({ idToken: jwt({ email: 'me@example.com' }), refreshToken: 'r', expiresAt: Date.now() + 3600_000 }),
+    )
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, {}))
     render(<App />)
-    await fill(user)
-    await user.click(screen.getByRole('button', { name: /tailor my resume/i }))
-    expect(await screen.findByText('The resume is missing.')).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('form', { name: 'Sign in' })).toBeInTheDocument()
+    expect(sessionStorage.getItem('resume-tailor.session')).toBeNull()
   })
 })

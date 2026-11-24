@@ -2,15 +2,17 @@
 
 A multi-agent AWS pipeline that tailors a resume to a job description. The user gets a tailored summary and bullets, an honest gap list of requirements the resume does not meet, and a downloadable PDF. The same draft and PDF are also emailed through SES.
 
-> **Demo only.** Resumes contain personal data and the app is unauthenticated. Do not submit real resumes until authentication is added. Uploaded files and results are deleted from S3 after one day.
+> **Demo.** Users sign in with an email and password (Amazon Cognito). Resumes are personal data: uploaded files and results are deleted from S3 after one day, and the recipient address is deleted from DynamoDB once the email has been attempted. Review the limitations below before real use.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-  U[Browser<br/>React + Vite] -->|HTTPS| CF[CloudFront]
+  U[Browser<br/>React + Vite] -->|sign in| COG[Cognito<br/>user pool]
+  U -->|HTTPS + ID token| CF[CloudFront]
   CF -->|/* static| S3W[(S3 site bucket<br/>private, OAC)]
-  CF -->|/api/*| APIGW[API Gateway<br/>HTTP API]
+  CF -->|/api/*| APIGW[API Gateway<br/>HTTP API<br/>JWT authorizer]
+  APIGW -.->|validate token| COG
   APIGW -->|POST /api/submit| SUB[submit λ]
   APIGW -->|GET /api/jobs/id| STA[status λ]
   SUB -->|inputs| S3D[(S3 data bucket<br/>uploads/ results/)]
@@ -31,10 +33,11 @@ flowchart LR
   STA -->|presigned URL| S3D
 ```
 
-1. The page posts the resume and job description to `/api/submit`. The submit Lambda validates length, stores both documents in S3, creates the job in DynamoDB and starts the state machine. It returns a job id immediately, so the 29 second API Gateway limit does not apply.
-2. Three specialist Lambdas run in order. Each has its own system prompt, and the state object carries each stage's output to the next (`$.analysis`, `$.match`, `$.rewrite`).
-3. The rewriter stores the PDF, emails the draft and gap list with the PDF attached (SES), then marks the job done. An email failure never fails the job: the page shows the reason and the download link still works. The recipient address is deleted from DynamoDB as soon as the email has been attempted.
-4. The page polls `/api/jobs/{id}` every 3 seconds. When the job is done, the response contains the result, the email outcome and a fresh 15 minute presigned URL for the PDF.
+1. The user signs in (or creates an account and confirms the emailed code). The browser keeps the Cognito ID token in `sessionStorage` and sends it as a bearer token. API Gateway rejects any request without a valid token before a Lambda runs.
+2. The page posts the resume and job description to `/api/submit`. The submit Lambda takes the user id and verified email from the token claims (never from the request body), enforces a per-user daily limit, validates length, stores both documents in S3, creates the job in DynamoDB and starts the state machine. It returns a job id immediately, so the 29 second API Gateway limit does not apply.
+3. Three specialist Lambdas run in order. Each has its own system prompt, and the state object carries each stage's output to the next (`$.analysis`, `$.match`, `$.rewrite`).
+4. The rewriter stores the PDF, emails the draft and gap list with the PDF attached (SES), then marks the job done. An email failure never fails the job: the page shows the reason and the download link still works. The recipient address is deleted from DynamoDB as soon as the email has been attempted.
+5. The page polls `/api/jobs/{id}` every 3 seconds. When the job is done, the response contains the result, the email outcome and a fresh 15 minute presigned URL for the PDF.
 
 CloudFront serves the React app and forwards `/api/*` to the API, so the browser stays on one origin and no CORS configuration is needed.
 
@@ -65,7 +68,7 @@ If nothing honest survives, the job fails with a clear message instead of return
 |---|---|
 | Max iterations | `llm.converse_json` repairs bad JSON at most `MAX_AGENT_ITERATIONS` (3) times. The rewriter's generate-and-verify loop has the same cap. |
 | Error recovery | Step Functions `Retry` (backoff + jitter) on `ThrottledError`, `ModelOutputError` and Lambda service errors. `Catch` marks the job `FAILED`. A missing document raises `InputError` with a user-facing message. |
-| Guardrails | Input: 50 to 15,000 characters per document, checked in the submit Lambda and again in the analyzer. Output: secret-like strings (AWS keys, tokens, private keys, JWTs) are redacted from results and from audit entries. |
+| Guardrails | Input: 50 to 15,000 characters per document, checked in the submit Lambda and again in the analyzer. Access: JWT required on every route, jobs are only readable by their owner, 5 jobs per user per day. Output: secret-like strings (AWS keys, tokens, private keys, JWTs) are redacted from results and from audit entries. |
 | Audit log | Every stage writes its output to DynamoDB (`jobId`, `AUDIT#<timestamp>#<stage>`). |
 
 ## Tech stack
@@ -76,7 +79,8 @@ If nothing honest survives, the job fails with a clear message instead of return
 | Backend | Python 3.12 Lambdas, boto3, reportlab (PDF) |
 | Orchestration | AWS Step Functions (Standard) |
 | LLM | Amazon Bedrock `converse()`, `us.anthropic.claude-sonnet-4-6`, us-east-1 (IAM role, no API key) |
-| API | API Gateway HTTP API, throttled (submit: 1 req/s, burst 3) |
+| Auth | Amazon Cognito user pool (email + password, emailed verification code), API Gateway JWT authorizer |
+| API | API Gateway HTTP API, throttled (submit: 1 req/s, burst 3), 5 jobs per user per day |
 | Email | Amazon SES (`SendEmail` with a raw MIME message, PDF attached), IAM limited to one sender address |
 | Storage | S3 (private, encrypted, 1 day expiry), DynamoDB (on demand, TTL, PITR) |
 | Hosting | S3 + CloudFront (Origin Access Control, security headers, CSP) |
@@ -97,11 +101,11 @@ frontend/    React + Vite app
 Prerequisites: Node 22+, Python 3 with pip, AWS CLI with credentials for the target account.
 
 1. **Enable Bedrock model access** for Anthropic Claude Sonnet 4.6 in us-east-1 (Bedrock console, Model access). Calls fail without it.
-2. **Verify SES addresses** in us-east-1. New accounts are in SES sandbox mode, so both the sender and every recipient must be verified:
+2. **Verify SES addresses** in us-east-1. New accounts are in SES sandbox mode, so both the sender and every recipient (each user's account email) must be verified:
    ```bash
    aws sesv2 create-email-identity --region us-east-1 --email-identity you@example.com
    ```
-   Open the verification link SES emails to that address. Repeat for each address you will test with. Request production access in the SES console to email unverified addresses.
+   Open the verification link SES emails to that address. Repeat for each address you will test with. To email any signed-up user without verifying them one by one, request SES production access in the console. That is now reasonably safe, because mail only goes to an address the user proved they own at sign-up, and only to themselves.
 3. **Bootstrap CDK** once per account and region:
    ```bash
    cd infra && npm ci
@@ -115,7 +119,7 @@ Prerequisites: Node 22+, Python 3 with pip, AWS CLI with credentials for the tar
    ```bash
    cd infra && npx cdk deploy -c senderEmail=you@example.com
    ```
-   The `SiteUrl` output is the app. The Lambda dependency layer is built locally with `pip` (Linux wheels), or with Docker if pip is unavailable.
+   The `SiteUrl` output is the app. Open it, create an account, enter the code Cognito emails you, then sign in. Use an address you verified in SES. The Lambda dependency layer is built locally with `pip` (Linux wheels), or with Docker if pip is unavailable.
 
 ### Clean up
 
@@ -139,7 +143,8 @@ aws dynamodb query --region us-east-1 --table-name <JobsTableName output> \
 cd lambdas && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/ruff check . && .venv/bin/pytest
 
-# Frontend (set VITE_API_PROXY to a deployed ApiUrl to use a real backend)
+# Frontend. For `npm run dev` against a deployed stack: copy public/config.example.json to
+# public/config.json (UserPoolId and UserPoolClientId from the stack outputs) and set VITE_API_PROXY to ApiUrl.
 cd frontend && npm ci && npm run lint && npm run typecheck && npm test && npm run dev
 
 # Infra
@@ -150,8 +155,10 @@ Unit tests never call AWS. A test fixture blocks DynamoDB, S3 and Bedrock client
 
 ## Security notes and known limitations
 
-- No authentication. Anyone with the URL can submit jobs, so the API is throttled to limit Bedrock cost. Add Cognito or a WAF rate rule before real use.
-- The form emails whatever address is entered, so an open deployment could be used to send mail to strangers. Sandbox mode limits this to verified addresses. Keep the account in sandbox for demos, and add authentication before requesting SES production access.
+- Self sign-up is open: anyone can create an account. The per-user daily limit (5 jobs) and API throttling cap Bedrock cost, but many accounts multiply it. Add an AWS Budgets alarm, and consider invite-only sign-up (disable `selfSignUpEnabled`) or a WAF rate rule.
+- Cognito's default email sender is limited to about 50 messages a day. Configure Cognito to send through SES for more.
+- The password goes to Cognito over TLS (`USER_PASSWORD_AUTH`). Tokens are kept in `sessionStorage`, so they are cleared when the tab closes, and the CSP limits script injection. MFA and password reset are not implemented.
+- The email recipient is always the verified address on the signed-in account. The request body cannot choose it.
 - The API Gateway endpoint is also reachable directly, not only through CloudFront.
 - CloudFront uses its default certificate, which fixes the minimum TLS version at TLSv1. Use a custom domain and ACM certificate to enforce TLS 1.2.
 - Input is pasted text or a `.txt`/`.md` file read in the browser. PDF and DOCX parsing is not implemented.
@@ -168,5 +175,5 @@ Unit tests never call AWS. A test fixture blocks DynamoDB, S3 and Bedrock client
 | Honesty guardrail | see above, tested in `lambdas/tests/test_rewriter.py` |
 | One-command deploy | `cdk deploy` |
 | Bedrock `converse()`, no API key | `common/llm.py` |
-| Submit, poll, render, email | React app + status Lambda render the result and PDF link. `mailer.py` sends the email with the PDF attached. |
+| Login, submit, poll, render, email | React app + status Lambda render the result and PDF link. `mailer.py` sends the email with the PDF attached. |
 | Screenshot and audit log from a real run | to capture after the first deploy |
