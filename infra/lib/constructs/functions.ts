@@ -9,6 +9,7 @@ import {
   DOWNLOAD_URL_TTL_SECONDS,
   MAX_AGENT_ITERATIONS,
   MAX_DOC_CHARS,
+  MAX_JOBS_PER_USER_PER_DAY,
   MIN_DOC_CHARS,
   MODEL_ID,
   RESULTS_PREFIX,
@@ -55,6 +56,7 @@ export class Functions extends Construct {
       MAX_DOC_CHARS: String(MAX_DOC_CHARS),
       MIN_DOC_CHARS: String(MIN_DOC_CHARS),
       MAX_AGENT_ITERATIONS: String(MAX_AGENT_ITERATIONS),
+      MAX_JOBS_PER_USER_PER_DAY: String(MAX_JOBS_PER_USER_PER_DAY),
       DOWNLOAD_URL_TTL_SECONDS: String(DOWNLOAD_URL_TTL_SECONDS),
     };
 
@@ -70,7 +72,7 @@ export class Functions extends Construct {
     const results = `${RESULTS_PREFIX}*`;
 
     bucket.grantPut(this.submit, uploads);
-    table.grant(this.submit, 'dynamodb:PutItem');
+    table.grant(this.submit, 'dynamodb:PutItem', 'dynamodb:UpdateItem'); // job record + daily quota counter
 
     bucket.grantRead(this.status, results); // needed so presigned URLs are valid
     table.grant(this.status, 'dynamodb:GetItem');

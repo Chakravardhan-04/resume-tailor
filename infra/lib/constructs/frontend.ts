@@ -1,14 +1,16 @@
 import * as fs from 'node:fs';
-import { Duration, Fn, RemovalPolicy } from 'aws-cdk-lib';
+import { Duration, Fn, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { Construct } from 'constructs';
+import { Auth } from './auth';
 
 export interface FrontendProps {
   httpApi: apigw.HttpApi;
+  auth: Auth;
   /** Directory containing the built React app (frontend/dist). */
   distPath: string;
 }
@@ -38,7 +40,7 @@ export class Frontend extends Construct {
           override: true,
           contentSecurityPolicy:
             "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
-            "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+            `connect-src 'self' https://cognito-idp.${Stack.of(this).region}.amazonaws.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
         },
         strictTransportSecurity: {
           override: true,
@@ -76,7 +78,15 @@ export class Frontend extends Construct {
     });
 
     new deploy.BucketDeployment(this, 'DeploySite', {
-      sources: [deploy.Source.asset(props.distPath)],
+      sources: [
+        deploy.Source.asset(props.distPath),
+        // Runtime config read by the app at startup (public identifiers only, no secrets).
+        deploy.Source.jsonData('config.json', {
+          region: Stack.of(this).region,
+          userPoolId: props.auth.userPool.userPoolId,
+          clientId: props.auth.client.userPoolClientId,
+        }),
+      ],
       destinationBucket: siteBucket,
       distribution: this.distribution,
       distributionPaths: ['/*'],

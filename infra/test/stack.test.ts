@@ -91,6 +91,32 @@ test('jobs table has TTL, PITR and on-demand billing', () => {
   });
 });
 
+test('every API route requires the Cognito JWT authorizer', () => {
+  const routes = Object.values(template.findResources('AWS::ApiGatewayV2::Route')) as any[];
+  expect(routes.length).toBe(2);
+  for (const r of routes) {
+    expect(r.Properties.AuthorizationType).toBe('JWT');
+    expect(r.Properties.AuthorizerId).toBeDefined();
+  }
+  template.hasResourceProperties('AWS::ApiGatewayV2::Authorizer', {
+    AuthorizerType: 'JWT',
+    JwtConfiguration: Match.objectLike({ Audience: [Match.anyValue()] }),
+  });
+});
+
+test('user pool: email sign-in, verified email, public client without secret', () => {
+  template.hasResourceProperties('AWS::Cognito::UserPool', {
+    UsernameAttributes: ['email'],
+    AutoVerifiedAttributes: ['email'],
+    Policies: Match.objectLike({ PasswordPolicy: Match.objectLike({ MinimumLength: 10 }) }),
+  });
+  template.hasResourceProperties('AWS::Cognito::UserPoolClient', {
+    GenerateSecret: false,
+    ExplicitAuthFlows: Match.arrayWith(['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH']),
+    PreventUserExistenceErrors: 'ENABLED',
+  });
+});
+
 test('api exposes only submit and status routes, with throttling', () => {
   const routes = Object.values(template.findResources('AWS::ApiGatewayV2::Route')).map(
     (r: any) => r.Properties.RouteKey,
@@ -118,6 +144,11 @@ test('only the three stage functions may invoke Bedrock', () => {
     JSON.stringify(p.Properties.PolicyDocument).includes('bedrock:InvokeModel'),
   );
   expect(withBedrock).toHaveLength(3);
+});
+
+test('submit can update the quota counter', () => {
+  const policies = JSON.stringify(template.findResources('AWS::IAM::Policy'));
+  expect(policies).toContain('dynamodb:UpdateItem');
 });
 
 test('submit can start the state machine; no function has wildcard actions', () => {

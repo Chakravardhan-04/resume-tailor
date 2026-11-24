@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { CfnOutput, Stack, StackProps, Tags } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Api } from './constructs/api';
+import { Auth } from './constructs/auth';
 import { Data } from './constructs/data';
 import { Frontend } from './constructs/frontend';
 import { Functions } from './constructs/functions';
@@ -21,15 +22,19 @@ export class ResumeTailorStack extends Stack {
     const data = new Data(this, 'Data');
     const functions = new Functions(this, 'Functions', { data, senderEmail: props.senderEmail });
     const pipeline = new Pipeline(this, 'Pipeline', { data, functions });
-    const api = new Api(this, 'Api', { functions });
+    const auth = new Auth(this, 'Auth');
+    const api = new Api(this, 'Api', { functions, auth });
     const frontend = new Frontend(this, 'Frontend', {
       httpApi: api.httpApi,
+      auth,
       distPath: props.frontendDistPath ?? path.join(__dirname, '..', '..', 'frontend', 'dist'),
     });
 
     Tags.of(this).add('project', 'resume-tailor');
 
     new CfnOutput(this, 'SiteUrl', { value: `https://${frontend.distribution.distributionDomainName}` });
+    new CfnOutput(this, 'UserPoolId', { value: auth.userPool.userPoolId });
+    new CfnOutput(this, 'UserPoolClientId', { value: auth.client.userPoolClientId });
     new CfnOutput(this, 'ApiUrl', { value: api.httpApi.apiEndpoint });
     new CfnOutput(this, 'StateMachineArn', { value: pipeline.stateMachine.stateMachineArn });
     new CfnOutput(this, 'JobsTableName', { value: data.table.tableName });

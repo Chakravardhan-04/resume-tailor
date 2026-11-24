@@ -9,3 +9,6 @@ export const DOWNLOAD_URL_TTL_SECONDS = 900;
 /** S3 prefixes. Objects under both expire after one day (privacy: resumes are personal data). */
 export const UPLOADS_PREFIX = 'uploads/';
 export const RESULTS_PREFIX = 'results/';
+
+/** Per-user cap on jobs per UTC day (limits Bedrock cost). */
+export const MAX_JOBS_PER_USER_PER_DAY = 5;

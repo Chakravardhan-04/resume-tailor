@@ -1,5 +1,8 @@
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
+import * as authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import { Stack } from 'aws-cdk-lib';
+import { Auth } from './auth';
 import { Construct } from 'constructs';
 import { Functions } from './functions';
 
@@ -10,22 +13,31 @@ import { Functions } from './functions';
 export class Api extends Construct {
   readonly httpApi: apigw.HttpApi;
 
-  constructor(scope: Construct, id: string, props: { functions: Functions }) {
+  constructor(scope: Construct, id: string, props: { functions: Functions; auth: Auth }) {
     super(scope, id);
 
     this.httpApi = new apigw.HttpApi(this, 'HttpApi', {
       description: 'Resume tailoring: submit a job and poll its status',
     });
 
+    // Every route requires a valid Cognito ID token (checked by API Gateway before any Lambda runs).
+    const authorizer = new authorizers.HttpJwtAuthorizer(
+      'JwtAuthorizer',
+      `https://cognito-idp.${Stack.of(this).region}.amazonaws.com/${props.auth.userPool.userPoolId}`,
+      { jwtAudience: [props.auth.client.userPoolClientId] },
+    );
+
     this.httpApi.addRoutes({
       path: '/api/submit',
       methods: [apigw.HttpMethod.POST],
       integration: new integrations.HttpLambdaIntegration('SubmitIntegration', props.functions.submit),
+      authorizer,
     });
     this.httpApi.addRoutes({
       path: '/api/jobs/{jobId}',
       methods: [apigw.HttpMethod.GET],
       integration: new integrations.HttpLambdaIntegration('StatusIntegration', props.functions.status),
+      authorizer,
     });
 
     // Cost/abuse protection for an unauthenticated API: Bedrock calls are the expensive part.
