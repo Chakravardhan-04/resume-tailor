@@ -21,7 +21,7 @@ jobs:
         working-directory: lambdas
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
@@ -68,7 +68,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: infra/package-lock.json
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12' # used by pip to build the Lambda layer
       - uses: actions/download-artifact@v4
