@@ -40,6 +40,9 @@ HONESTY RULES (absolute):
 - Never mention a skill or requirement listed under GAPS. Those are the candidate's real gaps and are reported separately.
 - You may reorder, reword, and emphasise existing facts, and use the job's terminology only when the resume already shows the same thing.
 - Do not add numbers that are not in the resume.
+- Do not add outcomes, benefits or impact ("improving quality", "boosting reliability") unless the resume states them.
+- Do not upgrade scope, ownership or skill level: no "production", "managed", "led", "architected", "expert", "strong", "deep", "proven" unless the resume uses those words.
+- Keep each bullet close to its source line. Rewording for clarity and the job's vocabulary is fine; adding claims is not.
 - Each bullet needs "source_quote": a VERBATIM excerpt (max 200 characters) from the resume that the bullet is based on.
 
 Write a professional summary (2-4 sentences) and 4-8 achievement bullets, most relevant to the job first.
@@ -51,8 +54,8 @@ JSON schema:
 
 VERIFIER = f"""You are a fact-checker for resumes. You compare a rewritten summary and bullets against the ORIGINAL resume.
 
-Flag anything that is not fully supported by the original resume: invented skills, tools, employers, titles, dates, numbers, credentials, or responsibilities, and exaggerated scope or seniority.
-Rewording of supported facts is fine.
+Flag anything that is not fully supported by the original resume: invented skills, tools, employers, titles, dates, numbers, credentials, or responsibilities; exaggerated scope, ownership, seniority or proficiency (e.g. "managed", "production", "expert", "strong command"); and stated outcomes or benefits the resume does not mention (e.g. "improving code quality").
+Rewording of supported facts is fine. When in doubt, flag it.
 
 {_DATA_RULES}
 

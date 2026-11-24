@@ -67,3 +67,18 @@ def test_quote_in_source_rejects_invented_text():
 
 def test_quote_in_source_rejects_empty():
     assert not guardrails.quote_in_source("", "anything")
+
+
+@pytest.mark.parametrize(
+    ("text", "source", "expected"),
+    [
+        ("Managed the platform", "I manage a platform", []),  # same stem
+        ("Managing teams", "Built APIs", ["managed"]),
+        ("Led the migration", "Led a team", []),
+        ("Ran production systems", "Ran systems", ["production"]),
+        ("Proven track record of delivery", "Shipped features", ["proven", "track record"]),
+        ("Built APIs in Python", "Built APIs in Python", []),
+    ],
+)
+def test_unsupported_claims(text, source, expected):
+    assert guardrails.unsupported_claims(text, source) == expected

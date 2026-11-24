@@ -79,6 +79,88 @@ def numbers_supported(text: str, source: str) -> bool:
     return all(n.rstrip(",.") in source_numbers for n in _NUMBER.findall(text))
 
 
+# Words that assert scope, seniority, ownership, proficiency or impact. The rewriter may only use
+# one if the original resume uses it (or a word with the same stem) too.
+CLAIM_TERMS = (
+    "production",
+    "managed",
+    "manage",
+    "led",
+    "lead",
+    "owned",
+    "own",
+    "architected",
+    "architect",
+    "spearheaded",
+    "scaled",
+    "scale",
+    "scalable",
+    "mentored",
+    "mentor",
+    "expert",
+    "expertise",
+    "proven",
+    "track record",
+    "extensive",
+    "deep",
+    "strong",
+    "advanced",
+    "senior",
+    "principal",
+    "enterprise",
+    "mission-critical",
+    "high-availability",
+    "highly available",
+    "millions",
+    "thousands",
+    "large-scale",
+    "end-to-end",
+    "full-stack",
+    "improving",
+    "improved",
+    "increasing",
+    "increased",
+    "boosting",
+    "enhancing",
+    "streamline",
+    "streamlined",
+    "ensuring",
+    "drove",
+    "driving",
+    "delivered",
+    "delivering",
+    "reliable",
+    "robust",
+    "confidence",
+)
+_WORD = re.compile(r"[A-Za-z][A-Za-z-]*")
+
+
+def _stem(word: str) -> str:
+    """Crude suffix stripping so "managed", "manages" and "managing" compare equal."""
+    word = word.lower()
+    stem = re.sub(r"(ing|ed|es|s|e)$", "", word)
+    return stem if len(stem) >= 4 else word
+
+
+def unsupported_claims(text: str, source: str) -> list[str]:
+    """Claim terms used in `text` that the source never uses, compared on word stems."""
+    text_stems = {_stem(w) for w in _WORD.findall(text)}
+    source_stems = {_stem(w) for w in _WORD.findall(source)}
+    text_lower, source_lower = text.lower(), source.lower()
+    found, seen = [], set()
+    for term in CLAIM_TERMS:
+        if " " in term:
+            if term in text_lower and term not in source_lower:
+                found.append(term)
+            continue
+        stem = _stem(term)
+        if stem in text_stems and stem not in source_stems and stem not in seen:
+            seen.add(stem)
+            found.append(term)
+    return found
+
+
 def quote_in_source(quote: str, source: str) -> bool:
     """True if `quote` appears verbatim (ignoring whitespace/case) in `source`.
 

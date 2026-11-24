@@ -34,13 +34,14 @@ def test_numbers_supported():
 
 
 def test_filter_drops_fabricated_quotes_and_numbers(resume):
-    kept, summary_ok = rewriter.filter_deterministic(draft([HONEST, FAKE_QUOTE, FAKE_NUMBER]), resume)
+    kept, summary_ok, claims = rewriter.filter_deterministic(draft([HONEST, FAKE_QUOTE, FAKE_NUMBER]), resume)
     assert kept == [HONEST]
     assert summary_ok
+    assert claims == ["production"]  # from the dropped Kubernetes bullet
 
 
 def test_filter_flags_summary_with_invented_number(resume):
-    _, summary_ok = rewriter.filter_deterministic(draft([HONEST], summary="10 years of Python"), resume)
+    _, summary_ok, _ = rewriter.filter_deterministic(draft([HONEST], summary="10 years of Python"), resume)
     assert not summary_ok
 
 
@@ -51,6 +52,37 @@ def _patch_llm(monkeypatch, drafts, verdicts):
         return validate(next(drafts) if "fact-checker" not in system else next(verdicts))
 
     monkeypatch.setattr(llm, "converse_json", fake)
+
+
+def test_filter_drops_upgraded_scope_and_invented_outcomes(resume):
+    inflated = {"text": "Managed production REST APIs in Python.", "source_quote": "REST APIs in Python and Flask"}
+    outcome = {
+        "text": "Built REST APIs in Python, improving code quality.",
+        "source_quote": "REST APIs in Python and Flask",
+    }
+    led = {"text": "Led a team of 3 engineers on a migration project.", "source_quote": "Led a team of 3 engineers"}
+    kept, summary_ok, claims = rewriter.filter_deterministic(
+        draft([inflated, outcome, led], summary="Expert backend engineer."), resume
+    )
+    assert kept == [led]  # "Led" appears in the resume, so it is allowed
+    assert not summary_ok
+    assert claims == ["expert", "improving", "managed", "production"]
+
+
+def test_tailor_feeds_unsupported_words_back_to_the_model(monkeypatch, resume):
+    inflated = {"text": "Managed production REST APIs in Python.", "source_quote": "REST APIs in Python and Flask"}
+    prompts_seen = []
+
+    def fake(system, user, validate, **_):
+        if "fact-checker" in system:
+            return validate({"summary_supported": True, "unsupported_bullets": []})
+        prompts_seen.append(user)
+        return validate(draft([inflated] if len(prompts_seen) == 1 else [HONEST]))
+
+    monkeypatch.setattr(llm, "converse_json", fake)
+    out = rewriter.tailor(resume, MATCH)
+    assert out["bullets"] == [HONEST["text"]]
+    assert "Do not use these words" in prompts_seen[1] and "production" in prompts_seen[1]
 
 
 def test_tailor_removes_bullets_flagged_by_verifier(monkeypatch, resume):

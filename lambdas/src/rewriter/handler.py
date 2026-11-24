@@ -13,7 +13,7 @@ from typing import Any
 
 from common import config, jobs, llm, mailer, pdf, prompts, storage
 from common.errors import GuardrailError
-from common.guardrails import numbers_supported, quote_in_source, redact_secrets_deep
+from common.guardrails import numbers_supported, quote_in_source, redact_secrets_deep, unsupported_claims
 from common.stage import stage_handler
 
 logger = logging.getLogger(__name__)
@@ -51,14 +51,21 @@ def validate_verdict(count: int):
     return validate
 
 
-def filter_deterministic(draft: dict[str, Any], resume: str) -> tuple[list[dict], bool]:
-    """Layers 1 and 2. Returns (surviving bullets, summary_ok)."""
-    kept = [
-        b
-        for b in draft["bullets"]
-        if quote_in_source(b["source_quote"], resume) and numbers_supported(b["text"], resume)
-    ]
-    return kept, numbers_supported(draft["summary"], resume)
+def _supported(text: str, resume: str) -> bool:
+    return numbers_supported(text, resume) and not unsupported_claims(text, resume)
+
+
+def filter_deterministic(draft: dict[str, Any], resume: str) -> tuple[list[dict], bool, list[str]]:
+    """Layers 2 and 3. Returns (surviving bullets, summary_ok, unsupported claim terms seen)."""
+    kept = [b for b in draft["bullets"] if quote_in_source(b["source_quote"], resume) and _supported(b["text"], resume)]
+    claims = sorted(
+        {
+            t
+            for item in [draft["summary"], *(b["text"] for b in draft["bullets"])]
+            for t in unsupported_claims(item, resume)
+        }
+    )
+    return kept, _supported(draft["summary"], resume), claims
 
 
 def verify(resume: str, draft: dict[str, Any], bullets: list[dict]) -> dict[str, Any]:
@@ -94,7 +101,7 @@ def tailor(resume: str, match: dict[str, Any]) -> dict[str, Any]:
             max_tokens=3000,
             max_iterations=2,
         )
-        bullets, summary_ok = filter_deterministic(draft, resume)
+        bullets, summary_ok, claims = filter_deterministic(draft, resume)
         dropped = len(draft["bullets"]) - len(bullets)
         if bullets:
             verdict = verify(resume, draft, bullets)
@@ -113,6 +120,8 @@ def tailor(resume: str, match: dict[str, Any]) -> dict[str, Any]:
             "Some content was not supported by the resume and was removed. Use only facts, wording and numbers "
             "that appear in the resume, and cite an exact source_quote for every bullet."
         )
+        if claims:
+            feedback += f" Do not use these words, which the resume does not support: {', '.join(claims)}."
 
     if best is None:
         raise GuardrailError(
